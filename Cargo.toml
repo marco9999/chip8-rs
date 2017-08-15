@@ -1,0 +1,15 @@
+[package]
+name = "chip8_emu_rs"
+version = "0.1.0"
+authors = ["Marco Satti <marcosatti@gmail.com>"]
+
+[[bin]]
+name = "main"
+doc = false
+path = "src/main.rs"
+
+[dependencies]
+num = "0.1"
+serde = "1.0"
+serde_derive = "1.0"
+bincode = "0.8"
