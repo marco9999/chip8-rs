@@ -27,7 +27,7 @@ impl WordMemory {
 }
 
 impl Storage<uword> for WordMemory {
-    fn get_storage(&mut self) -> &mut [uword] {
+    fn storage(&mut self) -> &mut [uword] {
         self.values.as_mut_slice()
     }
 }

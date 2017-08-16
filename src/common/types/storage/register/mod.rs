@@ -5,11 +5,8 @@ use num::traits::*;
 use num::One;
 use common::types::storage::*;
 
-mod word_register;
-mod dword_register;
-
-pub use self::word_register::WordRegister;
-pub use self::dword_register::DwordRegister;
+pub mod word_register;
+pub mod dword_register;
 
 /// Stores information about a bitfield.
 #[derive(Debug, Copy, Clone)]

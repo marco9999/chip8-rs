@@ -1,11 +1,9 @@
-use common::types::storage::*;
-use common::types::storage::register::*;
+use common::types::storage::udword;
+use common::types::storage::register::word_register::WordRegister;
+use common::types::storage::register::dword_register::DwordRegister;
 
-mod instruction_table;
-mod instruction;
-
-pub use self::instruction_table::lookup;
-pub use self::instruction::Instruction;
+pub mod instruction_table;
+pub mod instruction;
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct CPU {

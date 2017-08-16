@@ -1,20 +1,51 @@
 use common::types::storage::{udword, uptr};
+use resources::cpu::instruction_table::lookup;
 
-#[derive(Debug)]
+#[derive(Copy, Clone, Debug)]
 pub struct Instruction {
-    value: udword,
+    /// Unique instruction index.
+    index: Option<usize>,
+    /// Raw instruction.
+    raw_inst: RawInstruction,
 }
 
 impl Instruction {
-    pub fn new(value: udword) -> Instruction {
+    /// Construct a new instruction, and performs a lookup to determine type of instruction.
+    pub fn new(raw_inst: RawInstruction) -> Instruction {
+        let index = lookup(raw_inst);
         Instruction {
+            index,
+            raw_inst,
+        }
+    }
+
+    /// Returns the unique instruction index previously looked up.
+    pub fn index(&self) -> Option<usize> {
+        self.index
+    }
+
+    pub fn raw_instruction(&self) -> RawInstruction {
+        self.raw_inst
+    }
+}
+
+#[derive(Copy, Clone, Debug)]
+pub struct RawInstruction {
+    /// Raw instruction value.
+    value: udword,
+}
+
+impl RawInstruction {
+    /// Construct a new instruction, and performs a lookup to determine type of instruction.
+    pub fn new(value: udword) -> RawInstruction {
+        RawInstruction {
             value,
         }
     }
 
     /// Returns the upper 4-bits of an instruction.
     pub fn high_nibble(&self) -> u8 {
-        ((self.value & 0xF000) >> 24) as u8
+        ((self.value & 0xF000) >> 12) as u8
     }
 
     /// Returns the lower 4-bits of an instruction.

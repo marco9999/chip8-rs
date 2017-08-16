@@ -1,12 +1,11 @@
-use common::types::storage::memory::*;
+pub mod cpu;
+pub mod spu;
+pub mod timer;
 
-mod cpu;
-mod spu;
-mod timer;
-
-pub use resources::cpu::*;
-pub use resources::spu::*;
-pub use resources::timer::*;
+use common::types::storage::memory::word_memory::WordMemory;
+use resources::cpu::CPU;
+use resources::spu::SPU;
+use resources::timer::Timer;
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Resources {

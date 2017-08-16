@@ -27,13 +27,13 @@ impl DwordRegister {
 }
 
 impl Storage<uword> for DwordRegister {
-    fn get_storage(&mut self) -> &mut [uword] {
+    fn storage(&mut self) -> &mut [uword] {
         unsafe { mem::transmute::<&mut udword, &mut [uword; 2]>(&mut self.value) }
     }
 }
 
 impl Storage<udword> for DwordRegister {
-    fn get_storage(&mut self) -> &mut [udword] {
+    fn storage(&mut self) -> &mut [udword] {
         unsafe { mem::transmute::<&mut udword, &mut [udword; 1]>(&mut self.value) }
     }
 }

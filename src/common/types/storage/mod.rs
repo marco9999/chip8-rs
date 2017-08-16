@@ -33,7 +33,7 @@ pub enum BusContext {
 /// Trait for read/writing to storage.
 pub trait Storage<T: PrimInt> {
     /// Get a mutable reference to storage of type T.
-    fn get_storage(&mut self) -> &mut [T];
+    fn storage(&mut self) -> &mut [T];
 
     /// Read mutator, applied on every read. 
     /// By default does not modify the read.
@@ -51,14 +51,14 @@ pub trait Storage<T: PrimInt> {
 
     /// Read a T, applying the read modifier.
     fn read(&mut self, ctx: BusContext, offset: usize) -> T {
-        let v = self.get_storage()[offset];
+        let v = self.storage()[offset];
         self.mutate_read(ctx, v)
     }
 
     /// Write a T, applying the write modifier.
     fn write(&mut self, ctx: BusContext, offset: usize, value: T) {
         let m = self.mutate_write(ctx, value);
-        self.get_storage()[offset] = m;
+        self.storage()[offset] = m;
     }
 
     /// Read a slice of T's.

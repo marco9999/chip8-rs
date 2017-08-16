@@ -8,3 +8,7 @@ extern crate bincode;
 
 pub mod common;
 pub mod resources;
+
+struct Core {
+    
+}
