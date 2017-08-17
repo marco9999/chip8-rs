@@ -1,4 +1,5 @@
 use std::vec::Vec;
+use std::mem;
 use common::types::storage::*;
 
 /// Word memory.
@@ -29,5 +30,11 @@ impl WordMemory {
 impl Storage<uword> for WordMemory {
     fn storage(&mut self) -> &mut [uword] {
         self.values.as_mut_slice()
+    }
+}
+
+impl Storage<udword> for WordMemory {
+    fn storage(&mut self) -> &mut [udword] {
+        unsafe { mem::transmute::<&mut [uword], &mut [udword]>(self.values.as_mut_slice()) }
     }
 }

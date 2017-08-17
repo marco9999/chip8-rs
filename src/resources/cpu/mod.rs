@@ -1,4 +1,4 @@
-use common::types::storage::udword;
+use common::types::storage::uptr;
 use common::types::storage::register::word_register::WordRegister;
 use common::types::storage::register::dword_register::DwordRegister;
 
@@ -7,10 +7,10 @@ pub mod instruction;
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct CPU {
-    pc: udword,
+    pc: uptr,
     gpr: [WordRegister; 16],
     i: DwordRegister,
-    stack: Vec<udword>,
+    stack: Vec<uptr>,
 }
 
 impl CPU {

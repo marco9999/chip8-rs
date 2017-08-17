@@ -5,7 +5,7 @@ use resources::cpu::instruction::RawInstruction;
 pub fn lookup(inst: RawInstruction) -> Option<usize> {
     let index: Option<usize> = match inst.high_nibble() {
         0x0 => {
-            match inst.constant() {
+            match inst.immediate() {
                 0xE0 => Some(0), // cls
                 0xEE => Some(1), // ret
                 _ => Some(2), // call_rca1802
@@ -65,14 +65,14 @@ pub fn lookup(inst: RawInstruction) -> Option<usize> {
             Some(23) // draw
         },
         0xE => {
-            match inst.constant() {
+            match inst.immediate() {
                 0x9E => Some(24), // sifkeq
                 0xA1 => Some(25), // sifkne
                 _ => None,
             }
         },
         0xF => {
-            match inst.constant() {
+            match inst.immediate() {
                 0x07 => Some(26), // timerr
                 0x0A => Some(27), // keyr
                 0x15 => Some(28), // timerw

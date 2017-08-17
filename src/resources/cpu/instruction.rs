@@ -11,7 +11,10 @@ pub struct Instruction {
 
 impl Instruction {
     /// Construct a new instruction, and performs a lookup to determine type of instruction.
-    pub fn new(raw_inst: RawInstruction) -> Instruction {
+    pub fn new(value: udword) -> Instruction {
+        let raw_inst = RawInstruction {
+            value,
+        };
         let index = lookup(raw_inst);
         Instruction {
             index,
@@ -68,8 +71,8 @@ impl RawInstruction {
         ((self.value & 0xF0) >> 4) as u8
     }
 
-    // Returns the constant parameter (bits 0-7).
-    pub fn constant(&self) -> u8 {
+    // Returns the immediate parameter (bits 0-7).
+    pub fn immediate(&self) -> u8 {
         (self.value & 0xFF) as u8
     }
 }

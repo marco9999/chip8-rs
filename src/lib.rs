@@ -10,5 +10,5 @@ pub mod common;
 pub mod resources;
 
 struct Core {
-    
+
 }

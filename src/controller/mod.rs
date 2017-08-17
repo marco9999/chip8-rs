@@ -2,7 +2,7 @@ pub struct Event {
     /// Event type that occurred.
     source: EventSource,
     /// Number of times the event occurred.
-    amount: usize,
+    amount: isize,
 }
 
 pub enum EventSource {
@@ -11,19 +11,13 @@ pub enum EventSource {
 }
 
 pub trait Controller {
-    pub fn step(&Event) -> usize;
-}
-
-pub struct CoreResources {
-    core: Weak<Core>,
-}
-
-pub impl CoreResources {
-    pub fn new(core: Weak<Core>) -> CoreResources {
-        core
+    fn run(&self, event: &Event) -> isize {
+        let mut amount = event.amount;
+        while amount > 0 {
+            amount -= self.step(event);
+        }
+        amount
     }
 
-    pub fn core(&self) -> Weak<Core> {
-        core
-    }
+    fn step(&Event) -> isize;
 }
