@@ -1,5 +1,5 @@
-use common::types::storage::{udword, uptr};
-use resources::cpu::instruction_table::lookup;
+use common::types::primative::*;
+use resources::cpu::instruction_lookup::lookup;
 
 #[derive(Copy, Clone, Debug)]
 pub struct Instruction {
@@ -27,7 +27,7 @@ impl Instruction {
         self.index
     }
 
-    pub fn raw_instruction(&self) -> RawInstruction {
+    pub fn raw(&self) -> RawInstruction {
         self.raw_inst
     }
 }
@@ -62,13 +62,13 @@ impl RawInstruction {
     }
 
     /// Returns the 'x' register parameter (bits 8-11).
-    pub fn x_register(&self) -> u8 {
-        ((self.value & 0xF00) >> 8) as u8
+    pub fn x_register(&self) -> usize {
+        (((self.value & 0xF00) >> 8) as u8) as usize
     }
 
     /// Returns the 'y' register parameter (bits 4-7).
-    pub fn y_register(&self) -> u8 {
-        ((self.value & 0xF0) >> 4) as u8
+    pub fn y_register(&self) -> usize {
+        (((self.value & 0xF0) >> 4) as u8) as usize
     }
 
     // Returns the immediate parameter (bits 0-7).

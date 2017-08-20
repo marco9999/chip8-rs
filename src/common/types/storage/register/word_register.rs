@@ -1,4 +1,5 @@
 use std::mem;
+use common::types::primative::*;
 use common::types::storage::*;
 use common::types::storage::register::*;
 

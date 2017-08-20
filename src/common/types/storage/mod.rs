@@ -5,23 +5,6 @@ use num::traits::*;
 pub mod memory;
 pub mod register;
 
-/// CHIP8 machine unsigned word (8-bits).
-#[allow(non_camel_case_types)]
-pub type uword = u8;
-/// CHIP8 machine signed word (8-bits).
-#[allow(non_camel_case_types)]
-pub type iword = i8;
-/// CHIP8 machine unsigned dword (16-bits).
-#[allow(non_camel_case_types)]
-pub type udword = u16;
-/// CHIP8 machine signed dword (16-bits).
-#[allow(non_camel_case_types)]
-pub type idword = i16;
-/// CHIP8 machine (unsigned) pointer type (16-bits).
-#[allow(non_camel_case_types)]
-pub type uptr = u16;
-
-
 /// Describes a bus access context, used to implement custom behaviour.
 /// Where the storage is not accessed through a bus, use 'Raw'
 /// (For example, a register attached directly to a CPU.)
@@ -75,42 +58,5 @@ pub trait Storage<T: PrimInt> {
         for index in 0..values.len() {
             self.write(ctx, offset + index, values[index])
         }
-    }
-}
-
-pub trait WrappingOps {
-    fn wrapping_add(self, rhs: Self) -> Self;
-    fn wrapping_sub(self, rhs: Self) -> Self;
-    fn wrapping_mul(self, rhs: Self) -> Self;
-    fn wrapping_neg(self) -> Self;
-}
-
-impl WrappingOps for uword {
-    fn wrapping_add(self, rhs: uword) -> Self {
-        uword::wrapping_add(self, rhs)
-    }
-    fn wrapping_sub(self, rhs: uword) -> Self {
-        uword::wrapping_sub(self, rhs)
-    }
-    fn wrapping_mul(self, rhs: uword) -> Self {
-        uword::wrapping_mul(self, rhs)
-    }
-    fn wrapping_neg(self) -> Self {
-        uword::wrapping_neg(self)
-    }
-}
-
-impl WrappingOps for udword {
-    fn wrapping_add(self, rhs: udword) -> Self {
-        udword::wrapping_add(self, rhs)
-    }
-    fn wrapping_sub(self, rhs: udword) -> Self {
-        udword::wrapping_sub(self, rhs)
-    }
-    fn wrapping_mul(self, rhs: udword) -> Self {
-        udword::wrapping_mul(self, rhs)
-    }
-    fn wrapping_neg(self) -> Self {
-        udword::wrapping_neg(self)
     }
 }

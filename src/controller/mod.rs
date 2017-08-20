@@ -1,3 +1,6 @@
+pub mod cpu;
+pub mod spu;
+
 pub struct Event {
     /// Event type that occurred.
     source: EventSource,
@@ -19,5 +22,5 @@ pub trait Controller {
         amount
     }
 
-    fn step(&Event) -> isize;
+    fn step(&self, &Event) -> isize;
 }

@@ -1,4 +1,5 @@
 use std::mem;
+use common::types::primative::*;
 use common::types::storage::*;
 use common::types::storage::register::*;
 
@@ -36,9 +37,6 @@ impl Storage<udword> for DwordRegister {
     fn storage(&mut self) -> &mut [udword] {
         unsafe { mem::transmute::<&mut udword, &mut [udword; 1]>(&mut self.value) }
     }
-}
-
-impl Register<uword> for DwordRegister {
 }
 
 impl Register<udword> for DwordRegister {

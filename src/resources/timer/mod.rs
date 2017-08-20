@@ -2,7 +2,7 @@ use common::types::storage::register::word_register::WordRegister;
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Timer {
-    counter: WordRegister,
+    pub counter: WordRegister,
 }
 
 impl Timer {
