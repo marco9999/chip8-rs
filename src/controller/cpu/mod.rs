@@ -1,4 +1,5 @@
 use std::sync::Weak;
+use std::sync::RwLock;
 use rand;
 use rand::Rng;
 use Core;
@@ -20,12 +21,21 @@ struct CPU {
 
 impl Controller for CPU {
     fn step(&self, event: &Event) -> isize {
-        let mut consumed = 0;
+        let mut consumed;
 
         match event.source {
-            Tick => {
+            ref _Tick => {
                 // Aquire resources.
-                let res = self.core.upgrade().unwrap().resources();
+                let core = self.core
+                    .upgrade()
+                    .unwrap();
+
+                let locked_res = core
+                    .resources();
+
+                let res: Resources = locked_res
+                    .write()
+                    .unwrap();
 
                 // Grab current instruction value at PC.
                 let pc: uptr = res.cpu.pc.read(BusContext::Raw, 0);
@@ -38,7 +48,7 @@ impl Controller for CPU {
                 let inst = Instruction::new(udword::from_be(inst_value));
 
                 // Perform instruction.
-                (INSTRUCTION_TABLE[inst.index().unwrap()])(&res, &inst.raw());
+                (INSTRUCTION_TABLE[inst.index().unwrap()])(&mut res, &inst.raw());
                 
                 // Finished one cycle.
                 consumed = 1;
@@ -56,7 +66,7 @@ impl CPU {
         }
     }
 
-    fn cls(res: &mut Resources, inst: &RawInstruction) {
+    fn cls(res: &mut Resources, _inst: &RawInstruction) {
         for row in res.gpu.framebuffer.iter_mut() {
             for pixel in row.iter_mut() {
                 *pixel = false;
@@ -64,12 +74,12 @@ impl CPU {
         }
     }
 
-    fn ret(res: &mut Resources, inst: &RawInstruction) {
+    fn ret(res: &mut Resources, _inst: &RawInstruction) {
         let ret_pc = res.cpu.stack.pop().unwrap();
         res.cpu.pc.write(BusContext::Raw, 0, ret_pc);
     }
 
-    fn call_rca1802(res: &mut Resources, inst: &RawInstruction) {
+    fn call_rca1802(_res: &mut Resources, _inst: &RawInstruction) {
         unimplemented!("CPU: call_rca1802");
     }
 
@@ -87,7 +97,7 @@ impl CPU {
         let x_index = inst.x_register();
         let value = res.cpu.gpr[x_index].read(BusContext::Raw, 0);
         if value == inst.immediate() {
-            let pc = res.cpu.pc.read(BusContext::Raw, 0);
+            let pc: uptr = res.cpu.pc.read(BusContext::Raw, 0);
             res.cpu.pc.write(BusContext::Raw, 0, pc + INSTRUCTION_SIZE as uptr);
         }
     }
@@ -96,7 +106,7 @@ impl CPU {
         let x_index = inst.x_register();
         let value = res.cpu.gpr[x_index].read(BusContext::Raw, 0);
         if value != inst.immediate() {
-            let pc = res.cpu.pc.read(BusContext::Raw, 0);
+            let pc: uptr = res.cpu.pc.read(BusContext::Raw, 0);
             res.cpu.pc.write(BusContext::Raw, 0, pc + INSTRUCTION_SIZE as uptr);
         }
     }
@@ -107,7 +117,7 @@ impl CPU {
         let x_value = res.cpu.gpr[x_index].read(BusContext::Raw, 0);
         let y_value = res.cpu.gpr[y_index].read(BusContext::Raw, 0);
         if x_value == y_value {
-            let pc = res.cpu.pc.read(BusContext::Raw, 0);
+            let pc: uptr = res.cpu.pc.read(BusContext::Raw, 0);
             res.cpu.pc.write(BusContext::Raw, 0, pc + INSTRUCTION_SIZE as uptr);
         }
     }
@@ -204,7 +214,7 @@ impl CPU {
         let x_value = res.cpu.gpr[x_index].read(BusContext::Raw, 0);
         let y_value = res.cpu.gpr[y_index].read(BusContext::Raw, 0);
         if x_value != y_value {
-            let pc = res.cpu.pc.read(BusContext::Raw, 0);
+            let pc:uptr = res.cpu.pc.read(BusContext::Raw, 0);
             res.cpu.pc.write(BusContext::Raw, 0, pc + INSTRUCTION_SIZE as uptr);
         }
     }
@@ -243,11 +253,12 @@ impl CPU {
                 let x_coord = x_coord + (bit as usize);
                 let old_value: bool = res.gpu.framebuffer[y_coord][x_coord];
                 let new_value: bool = (row_value & (1 << bit)) > 0;
-                if old_value == true && new_value == false {
+
+                res.gpu.framebuffer[y_coord][x_coord] = new_value ^ old_value;
+
+                if old_value == true && new_value == true {
                     res.cpu.gpr[0xF].write(BusContext::Raw, 0, 1);
                 }
-
-                res.gpu.framebuffer[y_coord][x_coord] = new_value;
             }
         }
     }
@@ -262,7 +273,7 @@ impl CPU {
         res.input.keys.write_bitfield(BusContext::Raw, 0, KEYS[key], key_value ^ 1);
 
         if key_value == 1 {
-            let pc = res.cpu.pc.read(BusContext::Raw, 0);
+            let pc: uptr = res.cpu.pc.read(BusContext::Raw, 0);
             res.cpu.pc.write(BusContext::Raw, 0, pc + INSTRUCTION_SIZE as uptr);
         }
     }
@@ -277,7 +288,7 @@ impl CPU {
         res.input.keys.write_bitfield(BusContext::Raw, 0, KEYS[key], key_value ^ 1);
 
         if key_value == 0 {
-            let pc = res.cpu.pc.read(BusContext::Raw, 0);
+            let pc: uptr = res.cpu.pc.read(BusContext::Raw, 0);
             res.cpu.pc.write(BusContext::Raw, 0, pc + INSTRUCTION_SIZE as uptr);
         }
     }

@@ -10,6 +10,19 @@ pub mod common;
 pub mod resources;
 pub mod controller;
 
-struct Core {
+use std::sync::RwLock;
+use resources::Resources;
 
+struct Core {
+    resources: RwLock<Resources>,
+}
+
+impl Core {
+    fn resources(&self) -> &RwLock<Resources> {
+        &self.resources
+    }
+
+    fn run(&self) {
+
+    }
 }
