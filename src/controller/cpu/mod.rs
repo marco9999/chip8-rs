@@ -10,12 +10,12 @@ use resources::cpu::*;
 use resources::cpu::instruction::*;
 use controller::*;
 
-struct CPU<'a> {
+struct Cpu<'a> {
     /// Core manager.
     core: &'a Core,
 }
 
-impl<'a> Controller for CPU<'a> {
+impl<'a> Controller for Cpu<'a> {
     fn core(&self) -> &Core {
         self.core
     }
@@ -50,9 +50,9 @@ impl<'a> Controller for CPU<'a> {
     }
 }
 
-impl<'a> CPU<'a> {
-    pub fn new(core: &Core) -> CPU {
-        CPU {
+impl<'a> Cpu<'a> {
+    pub fn new(core: &Core) -> Cpu {
+        Cpu {
             core,
         }
     }
@@ -71,7 +71,7 @@ impl<'a> CPU<'a> {
     }
 
     fn call_rca1802(_res: &mut Resources, _inst: &RawInstruction) {
-        unimplemented!("CPU: call_rca1802");
+        unimplemented!("Cpu: call_rca1802");
     }
 
     fn jump(res: &mut Resources, inst: &RawInstruction) {
@@ -360,41 +360,41 @@ impl<'a> CPU<'a> {
     }
 }
 
-/// CPU instruction function pointer table.
+/// Cpu instruction function pointer table.
 static INSTRUCTION_TABLE: [fn(&mut Resources, &RawInstruction); INSTRUCTION_COUNT] = [
-    CPU::cls, 
-    CPU::ret, 
-    CPU::call_rca1802, 
-    CPU::jump, 
-    CPU::call, 
-    CPU::sifeqi,
-    CPU::sifnei,
-    CPU::sifeq,
-    CPU::movi, 
-    CPU::addi, 
-    CPU::mov, 
-    CPU::or, 
-    CPU::and, 
-    CPU::xor, 
-    CPU::add, 
-    CPU::sub, 
-    CPU::shr1, 
-    CPU::rsub, 
-    CPU::shl1, 
-    CPU::sifne, 
-    CPU::movi_i, 
-    CPU::jumpr, 
-    CPU::rand, 
-    CPU::draw, 
-    CPU::sifkeq, 
-    CPU::sifkne, 
-    CPU::timerr, 
-    CPU::keyr, 
-    CPU::timerw, 
-    CPU::soundw, 
-    CPU::add_i, 
-    CPU::sprite_i,
-    CPU::bcd, 
-    CPU::save, 
-    CPU::load,
+    Cpu::cls, 
+    Cpu::ret, 
+    Cpu::call_rca1802, 
+    Cpu::jump, 
+    Cpu::call, 
+    Cpu::sifeqi,
+    Cpu::sifnei,
+    Cpu::sifeq,
+    Cpu::movi, 
+    Cpu::addi, 
+    Cpu::mov, 
+    Cpu::or, 
+    Cpu::and, 
+    Cpu::xor, 
+    Cpu::add, 
+    Cpu::sub, 
+    Cpu::shr1, 
+    Cpu::rsub, 
+    Cpu::shl1, 
+    Cpu::sifne, 
+    Cpu::movi_i, 
+    Cpu::jumpr, 
+    Cpu::rand, 
+    Cpu::draw, 
+    Cpu::sifkeq, 
+    Cpu::sifkne, 
+    Cpu::timerr, 
+    Cpu::keyr, 
+    Cpu::timerw, 
+    Cpu::soundw, 
+    Cpu::add_i, 
+    Cpu::sprite_i,
+    Cpu::bcd, 
+    Cpu::save, 
+    Cpu::load,
 ];

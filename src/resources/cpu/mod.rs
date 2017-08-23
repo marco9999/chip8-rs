@@ -26,7 +26,7 @@ pub static KEY_E: BitfieldParam = BitfieldParam::new(0xE, 1);
 pub static KEY_F: BitfieldParam = BitfieldParam::new(0xF, 1);
 pub static KEYS: [&'static BitfieldParam; KEYS_COUNT] = [&KEY_0, &KEY_1, &KEY_2, &KEY_3, &KEY_4, &KEY_5, &KEY_6, &KEY_7, &KEY_8, &KEY_9, &KEY_A, &KEY_B, &KEY_C, &KEY_D, &KEY_E, &KEY_F];
 
-pub struct CPU {
+pub struct Cpu {
     pub clock_state: ClockState,
     pub pc: DwordRegister,
     pub gpr: [WordRegister; 16],
@@ -36,9 +36,9 @@ pub struct CPU {
     pub framebuffer: [[bool; HORIZONTAL_RES]; VERTICAL_RES],
 }
 
-impl CPU {
-    pub fn new() -> CPU {
-        CPU {
+impl Cpu {
+    pub fn new() -> Cpu {
+        Cpu {
             clock_state: ClockState::new(),
             pc: DwordRegister::from(0x200),
             gpr: [WordRegister::new(), WordRegister::new(), WordRegister::new(), WordRegister::new(), WordRegister::new(), WordRegister::new(), WordRegister::new(), WordRegister::new(), 
