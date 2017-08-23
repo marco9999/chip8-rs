@@ -1,5 +1,3 @@
-use std::sync::Weak;
-use std::sync::RwLock;
 use rand;
 use rand::Rng;
 use Core;
@@ -8,34 +6,27 @@ use common::types::primative::*;
 use common::types::storage::*;
 use common::types::storage::register::*;
 use resources::Resources;
-use resources::input::*;
-use resources::cpu::instruction::Instruction;
-use resources::cpu::instruction::RawInstruction;
-use controller::Event;
-use controller::Controller;
+use resources::cpu::*;
+use resources::cpu::instruction::*;
+use controller::*;
 
-struct CPU {
+struct CPU<'a> {
     /// Core manager.
-    core: Weak<Core>,
+    core: &'a Core,
 }
 
-impl Controller for CPU {
+impl<'a> Controller for CPU<'a> {
+    fn core(&self) -> &Core {
+        self.core
+    }
+
     fn step(&self, event: &Event) -> isize {
-        let mut consumed;
+        let consumed;
 
         match event.source {
-            ref _Tick => {
+            EventSource::Tick => { 
                 // Aquire resources.
-                let core = self.core
-                    .upgrade()
-                    .unwrap();
-
-                let locked_res = core
-                    .resources();
-
-                let res: Resources = locked_res
-                    .write()
-                    .unwrap();
+                let mut res = self.core().resources();
 
                 // Grab current instruction value at PC.
                 let pc: uptr = res.cpu.pc.read(BusContext::Raw, 0);
@@ -59,15 +50,15 @@ impl Controller for CPU {
     }
 }
 
-impl CPU {
-    pub fn new(core: Weak<Core>) -> CPU {
+impl<'a> CPU<'a> {
+    pub fn new(core: &Core) -> CPU {
         CPU {
             core,
         }
     }
 
     fn cls(res: &mut Resources, _inst: &RawInstruction) {
-        for row in res.gpu.framebuffer.iter_mut() {
+        for row in res.cpu.framebuffer.iter_mut() {
             for pixel in row.iter_mut() {
                 *pixel = false;
             }
@@ -219,7 +210,7 @@ impl CPU {
         }
     }
 
-    fn movi_I(res: &mut Resources, inst: &RawInstruction) {
+    fn movi_i(res: &mut Resources, inst: &RawInstruction) {
         let addr = inst.address();
         res.cpu.i.write(BusContext::Raw, 0, addr);
     }
@@ -230,7 +221,7 @@ impl CPU {
     }
 
     fn rand(res: &mut Resources, inst: &RawInstruction) {
-        let num: u8 = rand::thread_rng().gen_range(0, 256);
+        let num: u8 = rand::thread_rng().gen();
         let x_index = inst.x_register();
         res.cpu.gpr[x_index].write(BusContext::Raw, 0, num & inst.immediate());
     }
@@ -251,10 +242,10 @@ impl CPU {
             
             for bit in 0..(8 + 1) {
                 let x_coord = x_coord + (bit as usize);
-                let old_value: bool = res.gpu.framebuffer[y_coord][x_coord];
+                let old_value: bool = res.cpu.framebuffer[y_coord][x_coord];
                 let new_value: bool = (row_value & (1 << bit)) > 0;
 
-                res.gpu.framebuffer[y_coord][x_coord] = new_value ^ old_value;
+                res.cpu.framebuffer[y_coord][x_coord] = new_value ^ old_value;
 
                 if old_value == true && new_value == true {
                     res.cpu.gpr[0xF].write(BusContext::Raw, 0, 1);
@@ -266,11 +257,11 @@ impl CPU {
     fn sifkeq(res: &mut Resources, inst: &RawInstruction) {
         let x_index = inst.x_register();
         let key = res.cpu.gpr[x_index].read(BusContext::Raw, 0) as usize;
-        let key_value = res.input.keys.read_bitfield(BusContext::Raw, 0, KEYS[key]);
+        let key_value = res.cpu.keys.read_bitfield(BusContext::Raw, 0, KEYS[key]);
 
         // TODO: remove later...
         println!("sifkeq rotating result {} -> {}...", key_value, key_value ^ 1);
-        res.input.keys.write_bitfield(BusContext::Raw, 0, KEYS[key], key_value ^ 1);
+        res.cpu.keys.write_bitfield(BusContext::Raw, 0, KEYS[key], key_value ^ 1);
 
         if key_value == 1 {
             let pc: uptr = res.cpu.pc.read(BusContext::Raw, 0);
@@ -281,11 +272,11 @@ impl CPU {
     fn sifkne(res: &mut Resources, inst: &RawInstruction) {
         let x_index = inst.x_register();
         let key = res.cpu.gpr[x_index].read(BusContext::Raw, 0) as usize;
-        let key_value = res.input.keys.read_bitfield(BusContext::Raw, 0, KEYS[key]);
+        let key_value = res.cpu.keys.read_bitfield(BusContext::Raw, 0, KEYS[key]);
 
         // TODO: remove later...
         println!("sifkeq rotating result {} -> {}...", key_value, key_value ^ 1);
-        res.input.keys.write_bitfield(BusContext::Raw, 0, KEYS[key], key_value ^ 1);
+        res.cpu.keys.write_bitfield(BusContext::Raw, 0, KEYS[key], key_value ^ 1);
 
         if key_value == 0 {
             let pc: uptr = res.cpu.pc.read(BusContext::Raw, 0);
@@ -302,7 +293,7 @@ impl CPU {
     fn keyr(res: &mut Resources, inst: &RawInstruction) {
         // TODO: remove later...
         let key: u8 = rand::thread_rng().gen_range(0, 16);
-        res.input.keys.write_bitfield(BusContext::Raw, 0, KEYS[key as usize], 1);
+        res.cpu.keys.write_bitfield(BusContext::Raw, 0, KEYS[key as usize], 1);
 
         let x_index = inst.x_register();
         res.cpu.gpr[x_index].write(BusContext::Raw, 0, key);
@@ -320,14 +311,14 @@ impl CPU {
         res.spu.counter.write(BusContext::Raw, 0, value);
     }
 
-    fn add_I(res: &mut Resources, inst: &RawInstruction) {
+    fn add_i(res: &mut Resources, inst: &RawInstruction) {
         let x_index = inst.x_register();
         let value = res.cpu.gpr[x_index].read(BusContext::Raw, 0);
         let i_value: udword = res.cpu.i.read(BusContext::Raw, 0);
         res.cpu.i.write(BusContext::Raw, 0, i_value + (value as udword));
     }
 
-    fn sprite_I(res: &mut Resources, inst: &RawInstruction) {
+    fn sprite_i(res: &mut Resources, inst: &RawInstruction) {
         let x_index = inst.x_register();
         let value = res.cpu.gpr[x_index].read(BusContext::Raw, 0);
         let addr = (SPRITE_SIZE * value as usize) as uptr;
@@ -391,7 +382,7 @@ static INSTRUCTION_TABLE: [fn(&mut Resources, &RawInstruction); INSTRUCTION_COUN
     CPU::rsub, 
     CPU::shl1, 
     CPU::sifne, 
-    CPU::movi_I, 
+    CPU::movi_i, 
     CPU::jumpr, 
     CPU::rand, 
     CPU::draw, 
@@ -401,8 +392,8 @@ static INSTRUCTION_TABLE: [fn(&mut Resources, &RawInstruction); INSTRUCTION_COUN
     CPU::keyr, 
     CPU::timerw, 
     CPU::soundw, 
-    CPU::add_I, 
-    CPU::sprite_I,
+    CPU::add_i, 
+    CPU::sprite_i,
     CPU::bcd, 
     CPU::save, 
     CPU::load,

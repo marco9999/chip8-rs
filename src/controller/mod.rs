@@ -1,6 +1,8 @@
 pub mod cpu;
 pub mod spu;
 
+pub use Core;
+
 pub struct Event {
     /// Event type that occurred.
     source: EventSource,
@@ -14,13 +16,11 @@ pub enum EventSource {
 }
 
 pub trait Controller {
-    fn run(&self, event: &Event) -> isize {
-        let mut amount = event.amount;
-        while amount > 0 {
-            amount -= self.step(event);
-        }
-        amount
+    fn run(&self) {
+
     }
+
+    fn core(&self) -> &Core;
 
     fn step(&self, &Event) -> isize;
 }

@@ -10,16 +10,18 @@ pub mod common;
 pub mod resources;
 pub mod controller;
 
-use std::sync::RwLock;
+use std::cell::UnsafeCell;
 use resources::Resources;
 
-struct Core {
-    resources: RwLock<Resources>,
+pub struct Core {
+    resources: UnsafeCell<Resources>,
 }
 
 impl Core {
-    fn resources(&self) -> &RwLock<Resources> {
-        &self.resources
+    fn resources(&self) -> &mut Resources {
+        unsafe {
+            &mut *self.resources.get()
+        }
     }
 
     fn run(&self) {
