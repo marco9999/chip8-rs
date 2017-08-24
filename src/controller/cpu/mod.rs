@@ -10,7 +10,7 @@ use resources::cpu::*;
 use resources::cpu::instruction::*;
 use controller::*;
 
-struct Cpu<'a> {
+pub struct Cpu<'a> {
     /// Core manager.
     core: &'a Core,
 }

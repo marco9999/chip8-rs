@@ -1,5 +1,6 @@
 pub mod cpu;
 pub mod spu;
+pub mod timer;
 
 pub use Core;
 
@@ -19,6 +20,10 @@ pub trait Controller {
     fn run(&self) {
 
     }
+
+    fn event_queue(&self) {}
+
+    fn give_time(&self) {}
 
     fn core(&self) -> &Core;
 
