@@ -1,5 +1,6 @@
 use rand;
 use rand::Rng;
+use std::sync::mpsc::*;
 use Core;
 use common::constants::cpu::*;
 use common::types::primative::*;
@@ -13,48 +14,76 @@ use controller::*;
 pub struct Cpu<'a> {
     /// Core manager.
     core: &'a Core,
+
+    /// Event queue channel receiver.
+    event_queue_rx: Receiver<Event>,
+
+    /// Event queue channel sender.
+    event_queue_tx: SyncSender<Event>,
 }
 
 impl<'a> Controller for Cpu<'a> {
-    fn core(&self) -> &Core {
-        self.core
+    fn step(&self, event: Event) {
+        match event {
+            Event::Tick(mut amount) => { 
+                while amount > 0 {
+                    // Aquire resources.
+                    let res = self.core().resources();
+
+                    // Grab current instruction value at PC.
+                    let pc: uptr = res.cpu.pc.read(BusContext::Raw, 0);
+                    let inst_value: udword = res.memory.read(BusContext::Raw, pc as usize);
+
+                    // Update PC.
+                    res.cpu.pc.write(BusContext::Raw, 0, pc + INSTRUCTION_SIZE as uptr);
+
+                    // Get instruction details.
+                    let inst = Instruction::new(inst_value);
+                    let inst_index = inst.index().expect(&format!("Cpu encountered unknown instruction 0x{:X}", inst.raw().value));
+
+                    // Perform instruction.
+                    (INSTRUCTION_TABLE[inst_index])(res, &inst.raw());
+                    
+                    // Finished one cycle.
+                    amount -= 1;
+                }
+            },
+
+            Event::Input(_key, _pressed) => {
+                println!("Handling key presses not implemented yet");
+            }
+        }
     }
 
-    fn step(&self, event: &Event) -> isize {
-        let consumed;
+    fn event_iter(&self) -> TryIter<Event> {
+        self.event_queue_rx.try_iter()
+    }
 
-        match event.source {
-            EventSource::Tick => { 
-                // Aquire resources.
-                let mut res = self.core().resources();
+    fn send_event(&self, event: Event) {
+        self.event_queue_tx.send(event).unwrap();
+    }
 
-                // Grab current instruction value at PC.
-                let pc: uptr = res.cpu.pc.read(BusContext::Raw, 0);
-                let inst_value: udword = res.memory.read(BusContext::Raw, pc as usize);
-
-                // Update PC.
-                res.cpu.pc.write(BusContext::Raw, 0, pc + INSTRUCTION_SIZE as uptr);
-
-                // Get instruction details.
-                let inst = Instruction::new(udword::from_be(inst_value));
-
-                // Perform instruction.
-                (INSTRUCTION_TABLE[inst.index().unwrap()])(&mut res, &inst.raw());
-                
-                // Finished one cycle.
-                consumed = 1;
-            },
-        }
-
-        consumed
+    fn gen_tick_event(&self, time_delta_us: f64) {
+        let clock_state = &mut self.core().resources().cpu.clock_state;
+        let bias = self.core().config.cpu_bias;
+        clock_state.produce(time_delta_us, bias * CLOCK_SPEED);
+        let ticks = clock_state.consume_whole();
+        self.event_queue_tx.send(Event::Tick(ticks as isize)).unwrap();
     }
 }
 
 impl<'a> Cpu<'a> {
     pub fn new(core: &Core) -> Cpu {
+        let (event_queue_tx, event_queue_rx) = sync_channel::<Event>(128);
         Cpu {
             core,
+            event_queue_tx,
+            event_queue_rx,
         }
+    }
+
+    fn core(&self) -> &Core {
+        self.core
     }
 
     fn cls(res: &mut Resources, _inst: &RawInstruction) {
@@ -71,7 +100,7 @@ impl<'a> Cpu<'a> {
     }
 
     fn call_rca1802(_res: &mut Resources, _inst: &RawInstruction) {
-        unimplemented!("Cpu: call_rca1802");
+        // Does nothing...
     }
 
     fn jump(res: &mut Resources, inst: &RawInstruction) {

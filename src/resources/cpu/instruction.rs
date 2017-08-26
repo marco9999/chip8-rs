@@ -35,7 +35,7 @@ impl Instruction {
 #[derive(Copy, Clone, Debug)]
 pub struct RawInstruction {
     /// Raw instruction value.
-    value: udword,
+    pub value: udword,
 }
 
 impl RawInstruction {

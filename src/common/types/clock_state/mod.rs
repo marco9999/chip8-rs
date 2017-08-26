@@ -10,11 +10,13 @@ impl ClockState {
         }
     }
 
-    pub fn produce(&mut self, time_us: f64, speed: f64) {
-        self.ticks += time_us / 10e6 * speed;
+    pub fn produce(&mut self, time_us: f64, clock_speed: f64) {
+        self.ticks += time_us / 1e6 * clock_speed;
     }
 
-    pub fn consume(&mut self, ticks: f64) {
-        self.ticks -= ticks;
+    pub fn consume_whole(&mut self) -> isize{
+        let whole_ticks = self.ticks as isize;
+        self.ticks -= whole_ticks as f64;
+        whole_ticks
     }
 }

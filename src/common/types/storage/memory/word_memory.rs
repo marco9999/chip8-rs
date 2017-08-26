@@ -1,5 +1,14 @@
+//! Word memory.
+//!
+//! Represents a block of memory of arbitrary size.
+//! Loads and stores are automatically converted from the Chip8's
+//! big endian memory layout into the host's endianness.
+
 use std::vec::Vec;
 use std::mem;
+use std::io::Result;
+use std::io::Read;
+use std::fs::File;
 use common::types::storage::*;
 use common::types::primative::*;
 
@@ -25,6 +34,12 @@ impl WordMemory {
         WordMemory {
             values: vec![0; size],
         }
+    }
+
+    pub fn read_file(&mut self, offset: usize, path: &str) -> Result<()> {
+        let mut file = File::open(path)?;
+        file.read(&mut self.values[offset..])?;
+        Ok(())
     }
 }
 
