@@ -6,8 +6,7 @@
 
 use std::vec::Vec;
 use std::mem;
-use std::io::Result;
-use std::io::Read;
+use std::io::*;
 use std::fs::File;
 use common::types::storage::*;
 use common::types::primative::*;
@@ -39,6 +38,12 @@ impl WordMemory {
     pub fn read_file(&mut self, offset: usize, path: &str) -> Result<()> {
         let mut file = File::open(path)?;
         file.read(&mut self.values[offset..])?;
+        Ok(())
+    }
+
+    pub fn dump_file(&self, path: &str) -> Result<()> {
+        let mut file = File::create(path)?;
+        file.write_all(&self.values)?;
         Ok(())
     }
 }

@@ -33,13 +33,14 @@ impl<'a> Controller for Cpu<'a> {
                     // Grab current instruction value at PC.
                     let pc: uptr = res.cpu.pc.read(BusContext::Raw, 0);
                     let inst_value: udword = res.memory.read(BusContext::Raw, pc as usize);
+                    println!("cpu: pc = 0x{:04X}, inst_value = {:04X}", pc, inst_value);
 
                     // Update PC.
                     res.cpu.pc.write(BusContext::Raw, 0, pc + INSTRUCTION_SIZE as uptr);
 
                     // Get instruction details.
                     let inst = Instruction::new(inst_value);
-                    let inst_index = inst.index().expect(&format!("Cpu encountered unknown instruction 0x{:X}", inst.raw().value));
+                    let inst_index = inst.index().expect(&format!("Cpu encountered unknown instruction 0x{:X}", inst_value));
 
                     // Perform instruction.
                     (INSTRUCTION_TABLE[inst_index])(res, &inst.raw());
@@ -150,7 +151,8 @@ impl<'a> Cpu<'a> {
     fn addi(res: &mut Resources, inst: &RawInstruction) {
         let x_index = inst.x_register();
         let value = res.cpu.gpr[x_index].read(BusContext::Raw, 0);
-        res.cpu.gpr[x_index].write(BusContext::Raw, 0, value + inst.immediate());
+        let (result, _of) = value.overflowing_add(inst.immediate());
+        res.cpu.gpr[x_index].write(BusContext::Raw, 0, result);
     }
 
     fn mov(res: &mut Resources, inst: &RawInstruction) {

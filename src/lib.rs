@@ -19,6 +19,7 @@ use controller::spu::Spu;
 use controller::timer::Timer;
 
 pub struct Config {
+    pub workspace_path: String,
     pub time_delta_us: f64,
     pub cpu_bias: f64,
     pub spu_bias: f64,
@@ -37,6 +38,7 @@ impl Core {
             resources: Box::new(UnsafeCell::new(Resources::new())),
             controllers: Vec::new(),
             config: Config {
+                workspace_path: "./workspace/".to_owned(),
                 time_delta_us: 20000.0,
                 cpu_bias: 1.0, 
                 spu_bias: 1.0,
@@ -63,8 +65,9 @@ impl Core {
         }
 
         self.load_font_set();
+
         if let Err(_) = self.resources().memory.read_file(0x200, rom_path) {
-            return Err("Something went wrong loading rom file.".to_string());
+            return Err("Something went wrong loading rom file.".to_owned());
         }
 
         Ok(())
@@ -87,6 +90,18 @@ impl Core {
         }
 
         Ok(())
+    }
+
+    pub fn debug_dump_all(&self, postfix_tag: &str) -> Result<(), String> {
+        if let Err(_) = self.resources().memory.dump_file(&self.workspace_path(&format!("dumps/memory{}.bin", postfix_tag))) {
+            return Err("Something went wrong writing the memory dump file.".to_owned());
+        }
+
+        Ok(())
+    }
+
+    fn workspace_path(&self, rel_path: &str) -> String {
+        self.config.workspace_path.clone() + rel_path
     }
 
     fn resources(&self) -> &mut Resources {
