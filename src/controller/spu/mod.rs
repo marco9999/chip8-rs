@@ -15,6 +15,8 @@ pub struct Spu<'a> {
     event_queue_tx: SyncSender<Event>,
 }
 
+unsafe impl<'a> Sync for Spu<'a> {}
+
 impl<'a> Spu<'a> {
     pub fn new(core: &Core) -> Spu {
         let (event_queue_tx, event_queue_rx) = sync_channel::<Event>(128);
@@ -31,7 +33,7 @@ impl<'a> Spu<'a> {
 }
 
 impl<'a> Controller for Spu<'a> {
-    fn step(&self, event: Event) {
+    fn step(&self, event: Event) -> Result<(), String> {
         match event {
             Event::Tick(mut amount) => {
                 while amount > 0 {
@@ -41,7 +43,7 @@ impl<'a> Controller for Spu<'a> {
                     // Check sound register, make source and decrement if non-zero.
                     let counter = res.spu.counter.read(BusContext::Raw, 0);
                     if counter > 0 {
-                        println!("beep");
+                        info!("beep");
                         res.spu.counter.write(BusContext::Raw, 0, counter - 1);
                     }
                     
@@ -54,6 +56,8 @@ impl<'a> Controller for Spu<'a> {
                 unimplemented!("Spu doesn't know how to handle other event types");
             }
         }
+
+        Ok(())
     }
 
     fn event_iter(&self) -> TryIter<Event> {

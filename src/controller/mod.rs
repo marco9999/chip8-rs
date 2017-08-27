@@ -14,18 +14,20 @@ pub enum Event {
     Input(usize, bool),
 }
 
-pub trait Controller {
+pub trait Controller : Sync {
     /// Consumes all events in the event queue by calling step for
     /// each one.
-    fn run(&self) {
+    fn run(&self) -> Result<(), ()> {
         for event in self.event_iter() {
-            self.step(event);
+            self.step(event).unwrap();
         }
+
+        Ok(())
     }
     
     /// Steps through the controllers state and updates it for a
     /// single event.
-    fn step(&self, Event);
+    fn step(&self, Event) -> Result<(), String>;
 
     /// Returns an iterator to the events currently in event queue.
     /// Non-blocking.

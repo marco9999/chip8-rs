@@ -15,6 +15,8 @@ pub struct Timer<'a> {
     event_queue_tx: SyncSender<Event>,
 }
 
+unsafe impl<'a> Sync for Timer<'a> {}
+
 impl<'a> Timer<'a> {
     pub fn new(core: &Core) -> Timer {
         let (event_queue_tx, event_queue_rx) = sync_channel::<Event>(128);
@@ -31,7 +33,7 @@ impl<'a> Timer<'a> {
 }
 
 impl<'a> Controller for Timer<'a> {
-    fn step(&self, event: Event) {
+    fn step(&self, event: Event) -> Result<(), String> {
         match event {
             Event::Tick(mut amount) => { 
                 while amount > 0 {
@@ -53,6 +55,8 @@ impl<'a> Controller for Timer<'a> {
                 unimplemented!("Timer doesn't know how to handle other event types");
             }
         }
+
+        Ok(())
     }
 
     fn event_iter(&self) -> TryIter<Event> {

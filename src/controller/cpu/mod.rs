@@ -22,8 +22,10 @@ pub struct Cpu<'a> {
     event_queue_tx: SyncSender<Event>,
 }
 
+unsafe impl<'a> Sync for Cpu<'a> {}
+
 impl<'a> Controller for Cpu<'a> {
-    fn step(&self, event: Event) {
+    fn step(&self, event: Event) -> Result<(), String> {
         match event {
             Event::Tick(mut amount) => { 
                 while amount > 0 {
@@ -33,14 +35,17 @@ impl<'a> Controller for Cpu<'a> {
                     // Grab current instruction value at PC.
                     let pc: uptr = res.cpu.pc.read(BusContext::Raw, 0);
                     let inst_value: udword = res.memory.read(BusContext::Raw, pc as usize);
-                    println!("cpu: pc = 0x{:04X}, inst_value = {:04X}", pc, inst_value);
+
+                    if cfg!(build = "debug") {
+                        debug!("Cpu: pc = 0x{:04X}, inst_value = {:04X}", pc, inst_value);
+                    }                    
 
                     // Update PC.
                     res.cpu.pc.write(BusContext::Raw, 0, pc + INSTRUCTION_SIZE as uptr);
 
                     // Get instruction details.
                     let inst = Instruction::new(inst_value);
-                    let inst_index = inst.index().expect(&format!("Cpu encountered unknown instruction 0x{:X}", inst_value));
+                    let inst_index = inst.index().ok_or(format!("Cpu encountered unknown instruction 0x{:X}", inst_value))?;
 
                     // Perform instruction.
                     (INSTRUCTION_TABLE[inst_index])(res, &inst.raw());
@@ -51,9 +56,11 @@ impl<'a> Controller for Cpu<'a> {
             },
 
             Event::Input(_key, _pressed) => {
-                println!("Handling key presses not implemented yet");
+                unimplemented!("Handling key presses not implemented yet");
             }
         }
+
+        Ok(())
     }
 
     fn event_iter(&self) -> TryIter<Event> {
@@ -88,10 +95,8 @@ impl<'a> Cpu<'a> {
     }
 
     fn cls(res: &mut Resources, _inst: &RawInstruction) {
-        for row in res.cpu.framebuffer.iter_mut() {
-            for pixel in row.iter_mut() {
-                *pixel = false;
-            }
+        for pixel in res.cpu.framebuffer.iter_mut() {
+            *pixel = false;
         }
     }
 
@@ -273,10 +278,11 @@ impl<'a> Cpu<'a> {
             
             for bit in 0..8 {
                 let x_coord = x_coord + (bit as usize);
-                let old_value: bool = res.cpu.framebuffer[y_coord][x_coord];
-                let new_value: bool = (row_value & (1 << bit)) > 0;
+                let px_index = (y_coord * HORIZONTAL_RES) + x_coord;
+                let old_value: bool = res.cpu.framebuffer[px_index];
+                let new_value: bool = (row_value & (0x80 >> bit)) > 0;
 
-                res.cpu.framebuffer[y_coord][x_coord] = new_value ^ old_value;
+                res.cpu.framebuffer[px_index] = new_value ^ old_value;
 
                 if old_value == true && new_value == true {
                     res.cpu.gpr[0xF].write(BusContext::Raw, 0, 1);
@@ -291,7 +297,7 @@ impl<'a> Cpu<'a> {
         let key_value = res.cpu.keys.read_bitfield(BusContext::Raw, 0, KEYS[key]);
 
         // TODO: remove later...
-        println!("sifkeq rotating result {} -> {}...", key_value, key_value ^ 1);
+        debug!("sifkeq rotating result {} -> {}...", key_value, key_value ^ 1);
         res.cpu.keys.write_bitfield(BusContext::Raw, 0, KEYS[key], key_value ^ 1);
 
         if key_value == 1 {
@@ -306,7 +312,7 @@ impl<'a> Cpu<'a> {
         let key_value = res.cpu.keys.read_bitfield(BusContext::Raw, 0, KEYS[key]);
 
         // TODO: remove later...
-        println!("sifkeq rotating result {} -> {}...", key_value, key_value ^ 1);
+        debug!("sifkeq rotating result {} -> {}...", key_value, key_value ^ 1);
         res.cpu.keys.write_bitfield(BusContext::Raw, 0, KEYS[key], key_value ^ 1);
 
         if key_value == 0 {

@@ -33,7 +33,7 @@ pub struct Cpu {
     pub i: DwordRegister,
     pub stack: Vec<uptr>,
     pub keys: DwordRegister,
-    pub framebuffer: [[bool; HORIZONTAL_RES]; VERTICAL_RES],
+    pub framebuffer: [bool; HORIZONTAL_RES * VERTICAL_RES],
 }
 
 impl Cpu {
@@ -46,7 +46,7 @@ impl Cpu {
             i: DwordRegister::new(),
             stack: Vec::new(),
             keys: DwordRegister::new(),
-            framebuffer: [[false; HORIZONTAL_RES]; VERTICAL_RES],
+            framebuffer: [false; HORIZONTAL_RES * VERTICAL_RES],
         }
     }
 }

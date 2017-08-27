@@ -1,16 +1,24 @@
 #![feature(const_fn)]
+#![feature(associated_type_defaults)]
 
 extern crate num;
 extern crate rand;
+#[macro_use]
+extern crate log;
 #[macro_use] 
 extern crate serde_derive;
 extern crate bincode;
+extern crate futures;
+extern crate futures_cpupool;
 
 pub mod common;
 pub mod resources;
 pub mod controller;
 
 use std::cell::UnsafeCell;
+use futures::Future;
+use futures_cpupool::CpuPool;
+use futures_cpupool::CpuFuture;
 use common::types::storage::*;
 use resources::Resources;
 use controller::Controller;
@@ -21,37 +29,44 @@ use controller::timer::Timer;
 pub struct Config {
     pub workspace_path: String,
     pub time_delta_us: f64,
+    pub multithreaded_pool: Option<CpuPool>, 
     pub cpu_bias: f64,
     pub spu_bias: f64,
     pub timer_bias: f64,
 }
 
 pub struct Core {
+    pub config: Config,
     resources: Box<UnsafeCell<Resources>>,
     controllers: Vec<Box<Controller>>,
-    pub config: Config,
+    multithreaded_futures: Vec<CpuFuture<(), ()>>,
 }
+
+unsafe impl Sync for Core {}
 
 impl Core {
     pub fn new() -> Core {
         Core {
-            resources: Box::new(UnsafeCell::new(Resources::new())),
-            controllers: Vec::new(),
             config: Config {
                 workspace_path: "./workspace/".to_owned(),
                 time_delta_us: 20000.0,
+                multithreaded_pool: None,
                 cpu_bias: 1.0, 
                 spu_bias: 1.0,
                 timer_bias: 1.0,
-            }
+            },
+            resources: Box::new(UnsafeCell::new(Resources::new())),
+            controllers: Vec::new(),
+            multithreaded_futures: Vec::new(),
         }
     }
 
     pub fn new_config(config: Config) -> Core {
         Core {
+            config: config,
             resources: Box::new(UnsafeCell::new(Resources::new())),
             controllers: Vec::new(),
-            config: config,
+            multithreaded_futures: Vec::new(),
         }
     }
 
@@ -78,20 +93,34 @@ impl Core {
 
         unsafe {
             TIME_US += self.config.time_delta_us;
-            println!("Emulated time elapsed (s) = {:.6}", TIME_US / 1e6);
+            info!("Emulated time elapsed (s) = {:.6}", TIME_US / 1e6);
         }
 
         for ref cont in self.controllers.iter() {
             cont.gen_tick_event(self.config.time_delta_us);
         }
 
-        for ref cont in self.controllers.iter() {
-            cont.run();
+        match self.config.multithreaded_pool {
+            Some(ref pool) => {
+                for ref cont in self.controllers.iter() {
+                    self.multithreaded_futures.push(pool.spawn(cont.run()));
+                }
+
+                for task in self.multithreaded_futures.iter() {
+                    task.wait().unwrap();
+                }
+            },
+            None => {
+                for ref cont in self.controllers.iter() {
+                    cont.run();
+                }
+            },
         }
 
         Ok(())
     }
 
+    #[cfg(build = "debug")]
     pub fn debug_dump_all(&self, postfix_tag: &str) -> Result<(), String> {
         if let Err(_) = self.resources().memory.dump_file(&self.workspace_path(&format!("dumps/memory{}.bin", postfix_tag))) {
             return Err("Something went wrong writing the memory dump file.".to_owned());

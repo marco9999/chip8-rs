@@ -1,0 +1,22 @@
+appenders:
+  stdout:
+    kind: console
+    encoder:
+      pattern: "{m}{n}"
+
+  trace_file:
+    kind: file
+    path: "./workspace/log/trace.log"
+    encoder:
+      pattern: "{d} - {m}{n}"
+
+root:
+  level: info
+  appenders:
+    - stdout
+
+loggers:  
+  chip8_rs:
+    level: trace
+    appenders:
+      - trace_file
