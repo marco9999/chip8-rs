@@ -5,7 +5,6 @@
 //! big endian memory layout into the host's endianness.
 
 use std::vec::Vec;
-use std::mem;
 use std::io::*;
 use std::fs::File;
 use common::types::storage::*;
@@ -49,8 +48,8 @@ impl WordMemory {
 }
 
 impl Storage<uword> for WordMemory {
-    fn storage(&mut self) -> &mut [uword] {
-        self.values.as_mut_slice()
+    fn storage(&mut self, offset: usize) -> &mut uword {
+        &mut self.values[offset]
     }
 
     #[allow(unused_variables)]
@@ -65,8 +64,10 @@ impl Storage<uword> for WordMemory {
 }
 
 impl Storage<udword> for WordMemory {
-    fn storage(&mut self) -> &mut [udword] {
-        unsafe { mem::transmute::<&mut [uword], &mut [udword]>(self.values.as_mut_slice()) }
+    fn storage(&mut self, offset: usize) -> &mut udword {
+        unsafe { 
+            &mut *(&mut self.values[offset] as *mut u8 as *mut udword)
+        }
     }
 
     #[allow(unused_variables)]

@@ -28,8 +28,10 @@ impl WordRegister {
 }
 
 impl Storage<uword> for WordRegister {
-    fn storage(&mut self) -> &mut [uword] {
-        unsafe { mem::transmute::<&mut uword, &mut [uword; 1]>(&mut self.value) }
+    fn storage(&mut self, offset: usize) -> &mut uword {
+        unsafe { 
+            &mut mem::transmute::<&mut uword, &mut [uword; 1]>(&mut self.value)[offset] 
+        }
     }
 }
 

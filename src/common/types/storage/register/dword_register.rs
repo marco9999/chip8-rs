@@ -28,14 +28,18 @@ impl DwordRegister {
 }
 
 impl Storage<uword> for DwordRegister {
-    fn storage(&mut self) -> &mut [uword] {
-        unsafe { mem::transmute::<&mut udword, &mut [uword; 2]>(&mut self.value) }
+    fn storage(&mut self, offset: usize) -> &mut uword {
+        unsafe { 
+            &mut mem::transmute::<&mut udword, &mut [uword; 2]>(&mut self.value)[offset] 
+        }
     }
 }
 
 impl Storage<udword> for DwordRegister {
-    fn storage(&mut self) -> &mut [udword] {
-        unsafe { mem::transmute::<&mut udword, &mut [udword; 1]>(&mut self.value) }
+    fn storage(&mut self, offset: usize) -> &mut udword {
+        unsafe { 
+            &mut mem::transmute::<&mut udword, &mut [udword; 1]>(&mut self.value)[offset]
+        }
     }
 }
 

@@ -266,12 +266,12 @@ impl<'a> Cpu<'a> {
 
         res.cpu.gpr[0xF].write(BusContext::Raw, 0, 0);
 
-        for line in 0..(height + 1) {
+        for line in 0..height {
             let y_coord = y_coord + (line as usize);
             let addr: uptr = res.cpu.i.read(BusContext::Raw, 0);
             let row_value: uword = res.memory.read(BusContext::Raw, (addr as usize) + (line as usize));
             
-            for bit in 0..(8 + 1) {
+            for bit in 0..8 {
                 let x_coord = x_coord + (bit as usize);
                 let old_value: bool = res.cpu.framebuffer[y_coord][x_coord];
                 let new_value: bool = (row_value & (1 << bit)) > 0;
