@@ -7,6 +7,7 @@ extern crate chip8_rs as chip8;
 
 use futures_cpupool::CpuPool;
 use chip8::Core;
+use chip8::Config;
 
 fn main() {
     log4rs::init_file("./workspace/config/log.yml", Default::default()).unwrap();

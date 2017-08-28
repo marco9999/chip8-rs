@@ -88,7 +88,7 @@ impl Core {
         Ok(())
     }
 
-    pub fn run(&self) -> Result<(), String> {
+    pub fn run(&mut self) -> Result<(), String> {
         static mut TIME_US: f64 = 0.0;
 
         unsafe {
@@ -102,17 +102,29 @@ impl Core {
 
         match self.config.multithreaded_pool {
             Some(ref pool) => {
-                for ref cont in self.controllers.iter() {
-                    self.multithreaded_futures.push(pool.spawn(cont.run()));
+                for cont in self.controllers.iter() {
+                    struct _Controller(*const Controller);
+                    unsafe impl Sync for _Controller {}
+                    unsafe impl Send for _Controller {}
+                    let cont = _Controller { 0: cont.as_ref() as *const Controller };
+                    self.multithreaded_futures.push(pool.spawn_fn(move || {
+                        unsafe {
+                            let cont = &*cont.0;
+                            cont.run().unwrap();
+                            let result: Result<(), _> = Ok(());
+                            result
+                        }
+                    }));
                 }
 
-                for task in self.multithreaded_futures.iter() {
-                    task.wait().unwrap();
+                for _ in 0..self.multithreaded_futures.len() {
+                    let future = self.multithreaded_futures.pop().unwrap();
+                    future.wait().unwrap();
                 }
             },
             None => {
                 for ref cont in self.controllers.iter() {
-                    cont.run();
+                    cont.run().unwrap();
                 }
             },
         }
