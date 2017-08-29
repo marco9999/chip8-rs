@@ -10,12 +10,14 @@ extern crate serde_derive;
 extern crate bincode;
 extern crate futures;
 extern crate futures_cpupool;
+extern crate sdl2;
 
 pub mod common;
 pub mod resources;
 pub mod controller;
 
 use std::cell::UnsafeCell;
+use std::sync::mpsc::*;
 use futures::Future;
 use futures_cpupool::CpuPool;
 use futures_cpupool::CpuFuture;
@@ -35,11 +37,23 @@ pub struct Config {
     pub timer_bias: f64,
 }
 
+/// Events that are communicated from the controllers to the core,
+/// relating to user interaction, etc (host functionality).
+enum CoreEvent {
+    /// A render event, originating from a controller to update the screen.
+    Video,
+
+    /// A sound event, originating from a controller to play a beep sound.
+    Sound,
+}
+
 pub struct Core {
-    pub config: Config,
+    config: Config,
     resources: Box<Option<UnsafeCell<Resources>>>,
     controllers: Vec<Box<Controller>>,
     multithreaded_futures: Vec<CpuFuture<(), String>>,
+    event_queue_rx: Receiver<CoreEvent>,
+    event_queue_tx: SyncSender<CoreEvent>,
 }
 
 impl Core {
@@ -48,6 +62,7 @@ impl Core {
     /// This is to prevent moves when constructing, causing the controllers
     /// core references pointing to invalid locations.
     pub fn new(config: Option<Config>) -> Core {
+        let (event_queue_tx, event_queue_rx) = sync_channel::<CoreEvent>(128);
         match config {
             Some(config) => {
                 Core {
@@ -55,6 +70,8 @@ impl Core {
                     resources: Box::new(None),
                     controllers: Vec::new(),
                     multithreaded_futures: Vec::new(),
+                    event_queue_rx,
+                    event_queue_tx,
                 }
             },
             None => { 
@@ -70,12 +87,19 @@ impl Core {
                     resources: Box::new(None),
                     controllers: Vec::new(),
                     multithreaded_futures: Vec::new(),
+                    event_queue_rx,
+                    event_queue_tx,
                 }
             },
         }
     }
 
-    /// Resets the core, initialising a new Core state.
+    /// Resets the core, initialising the Core state.
+    /// Performs the following:
+    ///  - Allocates resources.
+    ///  - Resets all controllers.
+    ///  - Loads the default font set.
+    ///  - Loads the rom from the path given.
     pub fn reset(&mut self, rom_path: &str) -> Result<(), String> {
         self.resources = Box::new(Some(UnsafeCell::new(Resources::new())));
 
@@ -95,11 +119,14 @@ impl Core {
 
     /// Runs through each of the controllers that update the machine state.
     /// Each run will update the state for the time step defined at initialisation.
+    /// Also handles any events received from the controllers.
     pub fn run(&mut self) -> Result<(), String> {
-        unsafe {
-            static mut TIME_US: f64 = 0.0;
-            TIME_US += self.config.time_delta_us;
-            info!("Emulated time elapsed (s) = {:.6}", TIME_US / 1e6);
+        if cfg!(build = "debug") {
+            unsafe {
+                static mut TIME_US: f64 = 0.0;
+                TIME_US += self.config.time_delta_us;
+                info!("Emulated time elapsed (s) = {:.6}", TIME_US / 1e6);
+            }
         }
 
         for ref cont in self.controllers.iter() {
@@ -128,6 +155,17 @@ impl Core {
                     cont.run()?;
                 }
             },
+        }
+
+        for event in self.event_queue_rx.try_iter() {
+            match event {
+                CoreEvent::Video => {
+                    self.handle_video();
+                },
+                CoreEvent::Sound => {
+                    self.handle_sound();
+                },
+            }
         }
 
         Ok(())
@@ -161,6 +199,11 @@ impl Core {
                 },
             }
         }
+    }
+
+    /// Returns a reference to the shared config. 
+    fn config(&self) -> &Config {
+        &self.config
     }
 
     /// Initialises the default Chip8 font set and loads it into memory starting at offset 0x0. 
@@ -211,5 +254,20 @@ impl Core {
             return Err("Something went wrong loading rom file.".to_owned());
         }
         Ok(())
+    }
+
+    /// Sends an event to the back of the event queue attached to the core.
+    fn send_event(&self, event: CoreEvent) {
+        self.event_queue_tx.send(event).unwrap();
+    }
+
+    /// Updates the frame buffer.
+    fn handle_video(&self) {
+
+    }
+
+    /// Updates the sound buffer. 
+    fn handle_sound(&self) {
+
     }
 }

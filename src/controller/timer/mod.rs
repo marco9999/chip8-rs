@@ -8,18 +8,18 @@ pub struct Timer<'a> {
     /// Core manager.
     core: &'a Core,
 
-    /// Event queue channel receiver.
-    event_queue_rx: Receiver<Event>,
+    /// ControllerEvent queue channel receiver.
+    event_queue_rx: Receiver<ControllerEvent>,
 
-    /// Event queue channel sender.
-    event_queue_tx: SyncSender<Event>,
+    /// ControllerEvent queue channel sender.
+    event_queue_tx: SyncSender<ControllerEvent>,
 }
 
 unsafe impl<'a> Sync for Timer<'a> {}
 
 impl<'a> Timer<'a> {
     pub fn new(core: &Core) -> Timer {
-        let (event_queue_tx, event_queue_rx) = sync_channel::<Event>(128);
+        let (event_queue_tx, event_queue_rx) = sync_channel::<ControllerEvent>(128);
         Timer {
             core,
             event_queue_tx,
@@ -33,9 +33,9 @@ impl<'a> Timer<'a> {
 }
 
 impl<'a> Controller for Timer<'a> {
-    fn step(&self, event: Event) -> Result<(), String> {
+    fn step(&self, event: ControllerEvent) -> Result<(), String> {
         match event {
-            Event::Tick(mut amount) => { 
+            ControllerEvent::Tick(mut amount) => { 
                 while amount > 0 {
                     // Aquire resources.
                     let res = self.core().resources()?;
@@ -59,20 +59,20 @@ impl<'a> Controller for Timer<'a> {
         Ok(())
     }
 
-    fn event_iter(&self) -> TryIter<Event> {
+    fn event_iter(&self) -> TryIter<ControllerEvent> {
         self.event_queue_rx.try_iter()
     }
 
-    fn send_event(&self, event: Event) {
+    fn send_event(&self, event: ControllerEvent) {
         self.event_queue_tx.send(event).unwrap();
     }
 
     fn gen_tick_event(&self, time_delta_us: f64) -> Result<(), String> {
         let clock_state = &mut self.core().resources()?.timer.clock_state;
-        let bias = self.core().config.timer_bias;
+        let bias = self.core().config().timer_bias;
         clock_state.produce(time_delta_us, bias * CLOCK_SPEED);
         let ticks = clock_state.consume_whole();
-        self.event_queue_tx.send(Event::Tick(ticks as isize)).unwrap();
+        self.event_queue_tx.send(ControllerEvent::Tick(ticks as isize)).unwrap();
         Ok(())
     }
 }

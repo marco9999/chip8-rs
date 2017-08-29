@@ -4,7 +4,7 @@ pub mod timer;
 
 use std::sync::mpsc::*;
 
-pub enum Event {
+pub enum ControllerEvent {
     /// A clock tick event, containing the amount of whole ticks
     /// that occurred. 
     Tick(isize),
@@ -27,15 +27,15 @@ pub trait Controller : Sync {
     
     /// Steps through the controllers state and updates it for a
     /// single event.
-    fn step(&self, Event) -> Result<(), String>;
+    fn step(&self, ControllerEvent) -> Result<(), String>;
 
     /// Returns an iterator to the events currently in event queue.
     /// Non-blocking.
-    fn event_iter(&self) -> TryIter<Event>;
+    fn event_iter(&self) -> TryIter<ControllerEvent>;
 
     /// Sends an event to the back of the event queue attached to
     /// this controller.
-    fn send_event(&self, event: Event);
+    fn send_event(&self, event: ControllerEvent);
 
     /// Generates and sends a clock tick event, calculated from the 
     /// time delta given (in us). The controller implementing this 

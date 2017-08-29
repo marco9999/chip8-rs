@@ -2,6 +2,7 @@ use rand;
 use rand::Rng;
 use std::sync::mpsc::*;
 use Core;
+use CoreEvent;
 use common::constants::cpu::*;
 use common::types::primative::*;
 use common::types::storage::*;
@@ -15,19 +16,22 @@ pub struct Cpu<'a> {
     /// Core manager.
     core: &'a Core,
 
-    /// Event queue channel receiver.
-    event_queue_rx: Receiver<Event>,
+    /// ControllerEvent queue channel receiver.
+    event_queue_rx: Receiver<ControllerEvent>,
 
-    /// Event queue channel sender.
-    event_queue_tx: SyncSender<Event>,
+    /// ControllerEvent queue channel sender.
+    event_queue_tx: SyncSender<ControllerEvent>,
+
+    /// Instruction function pointer table.
+    instruction_table: [fn(&Cpu<'a>, &mut Resources, &RawInstruction); INSTRUCTION_COUNT],
 }
 
 unsafe impl<'a> Sync for Cpu<'a> {}
 
 impl<'a> Controller for Cpu<'a> {
-    fn step(&self, event: Event) -> Result<(), String> {
+    fn step(&self, event: ControllerEvent) -> Result<(), String> {
         match event {
-            Event::Tick(mut amount) => { 
+            ControllerEvent::Tick(mut amount) => { 
                 while amount > 0 {
                     // Aquire resources.
                     let res = self.core().resources()?;
@@ -48,14 +52,14 @@ impl<'a> Controller for Cpu<'a> {
                     let inst_index = inst.index().ok_or(format!("Cpu encountered unknown instruction 0x{:X}", inst_value))?;
 
                     // Perform instruction.
-                    (INSTRUCTION_TABLE[inst_index])(res, &inst.raw());
+                    (self.instruction_table[inst_index])(self, res, &inst.raw());
                     
                     // Finished one cycle.
                     amount -= 1;
                 }
             },
 
-            Event::Input(_key, _pressed) => {
+            ControllerEvent::Input(_key, _pressed) => {
                 unimplemented!("Handling key presses not implemented yet");
             }
         }
@@ -63,31 +67,68 @@ impl<'a> Controller for Cpu<'a> {
         Ok(())
     }
 
-    fn event_iter(&self) -> TryIter<Event> {
+    fn event_iter(&self) -> TryIter<ControllerEvent> {
         self.event_queue_rx.try_iter()
     }
 
-    fn send_event(&self, event: Event) {
+    fn send_event(&self, event: ControllerEvent) {
         self.event_queue_tx.send(event).unwrap();
     }
 
     fn gen_tick_event(&self, time_delta_us: f64) -> Result<(), String> {
         let clock_state = &mut self.core().resources()?.cpu.clock_state;
-        let bias = self.core().config.cpu_bias;
+        let bias = self.core().config().cpu_bias;
         clock_state.produce(time_delta_us, bias * CLOCK_SPEED);
         let ticks = clock_state.consume_whole();
-        self.event_queue_tx.send(Event::Tick(ticks as isize)).unwrap();
+        self.event_queue_tx.send(ControllerEvent::Tick(ticks as isize)).unwrap();
         Ok(())
     }
 }
 
 impl<'a> Cpu<'a> {
     pub fn new(core: &Core) -> Cpu {
-        let (event_queue_tx, event_queue_rx) = sync_channel::<Event>(128);
+        let (event_queue_tx, event_queue_rx) = sync_channel::<ControllerEvent>(128);
         Cpu {
             core,
             event_queue_tx,
             event_queue_rx,
+            instruction_table: [
+                Cpu::cls, 
+                Cpu::ret, 
+                Cpu::call_rca1802, 
+                Cpu::jump, 
+                Cpu::call, 
+                Cpu::sifeqi,
+                Cpu::sifnei,
+                Cpu::sifeq,
+                Cpu::movi, 
+                Cpu::addi, 
+                Cpu::mov, 
+                Cpu::or, 
+                Cpu::and, 
+                Cpu::xor, 
+                Cpu::add, 
+                Cpu::sub, 
+                Cpu::shr1, 
+                Cpu::rsub, 
+                Cpu::shl1, 
+                Cpu::sifne, 
+                Cpu::movi_i, 
+                Cpu::jumpr, 
+                Cpu::rand, 
+                Cpu::draw, 
+                Cpu::sifkeq, 
+                Cpu::sifkne, 
+                Cpu::timerr, 
+                Cpu::keyr, 
+                Cpu::timerw, 
+                Cpu::soundw, 
+                Cpu::add_i, 
+                Cpu::sprite_i,
+                Cpu::bcd, 
+                Cpu::save, 
+                Cpu::load,
+            ],
         }
     }
 
@@ -95,32 +136,32 @@ impl<'a> Cpu<'a> {
         self.core
     }
 
-    fn cls(res: &mut Resources, _inst: &RawInstruction) {
+    fn cls(&self, res: &mut Resources, _inst: &RawInstruction) {
         for pixel in res.cpu.framebuffer.iter_mut() {
             *pixel = false;
         }
     }
 
-    fn ret(res: &mut Resources, _inst: &RawInstruction) {
+    fn ret(&self, res: &mut Resources, _inst: &RawInstruction) {
         let ret_pc = res.cpu.stack.pop().unwrap();
         res.cpu.pc.write(BusContext::Raw, 0, ret_pc);
     }
 
-    fn call_rca1802(_res: &mut Resources, _inst: &RawInstruction) {
+    fn call_rca1802(&self, _res: &mut Resources, _inst: &RawInstruction) {
         // Does nothing...
     }
 
-    fn jump(res: &mut Resources, inst: &RawInstruction) {
+    fn jump(&self, res: &mut Resources, inst: &RawInstruction) {
         res.cpu.pc.write(BusContext::Raw, 0, inst.address());
     }
 
-    fn call(res: &mut Resources, inst: &RawInstruction) {
+    fn call(&self, res: &mut Resources, inst: &RawInstruction) {
         let pc = res.cpu.pc.read(BusContext::Raw, 0);
         res.cpu.stack.push(pc);
         res.cpu.pc.write(BusContext::Raw, 0, inst.address());
     }
 
-    fn sifeqi(res: &mut Resources, inst: &RawInstruction) {
+    fn sifeqi(&self, res: &mut Resources, inst: &RawInstruction) {
         let x_index = inst.x_register();
         let value = res.cpu.gpr[x_index].read(BusContext::Raw, 0);
         if value == inst.immediate() {
@@ -129,7 +170,7 @@ impl<'a> Cpu<'a> {
         }
     }
 
-    fn sifnei(res: &mut Resources, inst: &RawInstruction) {
+    fn sifnei(&self, res: &mut Resources, inst: &RawInstruction) {
         let x_index = inst.x_register();
         let value = res.cpu.gpr[x_index].read(BusContext::Raw, 0);
         if value != inst.immediate() {
@@ -138,7 +179,7 @@ impl<'a> Cpu<'a> {
         }
     }
 
-    fn sifeq(res: &mut Resources, inst: &RawInstruction) {
+    fn sifeq(&self, res: &mut Resources, inst: &RawInstruction) {
         let x_index = inst.x_register();
         let y_index = inst.y_register();
         let x_value = res.cpu.gpr[x_index].read(BusContext::Raw, 0);
@@ -149,26 +190,26 @@ impl<'a> Cpu<'a> {
         }
     }
 
-    fn movi(res: &mut Resources, inst: &RawInstruction) {
+    fn movi(&self, res: &mut Resources, inst: &RawInstruction) {
         let x_index = inst.x_register();
         res.cpu.gpr[x_index].write(BusContext::Raw, 0, inst.immediate());
     }
 
-    fn addi(res: &mut Resources, inst: &RawInstruction) {
+    fn addi(&self, res: &mut Resources, inst: &RawInstruction) {
         let x_index = inst.x_register();
         let value = res.cpu.gpr[x_index].read(BusContext::Raw, 0);
         let (result, _of) = value.overflowing_add(inst.immediate());
         res.cpu.gpr[x_index].write(BusContext::Raw, 0, result);
     }
 
-    fn mov(res: &mut Resources, inst: &RawInstruction) {
+    fn mov(&self, res: &mut Resources, inst: &RawInstruction) {
         let x_index = inst.x_register();
         let y_index = inst.y_register();
         let value = res.cpu.gpr[y_index].read(BusContext::Raw, 0);
         res.cpu.gpr[x_index].write(BusContext::Raw, 0, value);
     }
 
-    fn or(res: &mut Resources, inst: &RawInstruction) {
+    fn or(&self, res: &mut Resources, inst: &RawInstruction) {
         let x_index = inst.x_register();
         let y_index = inst.y_register();
         let x_value = res.cpu.gpr[x_index].read(BusContext::Raw, 0);
@@ -176,7 +217,7 @@ impl<'a> Cpu<'a> {
         res.cpu.gpr[x_index].write(BusContext::Raw, 0, x_value | y_value);
     }
 
-    fn and(res: &mut Resources, inst: &RawInstruction) {
+    fn and(&self, res: &mut Resources, inst: &RawInstruction) {
         let x_index = inst.x_register();
         let y_index = inst.y_register();
         let x_value = res.cpu.gpr[x_index].read(BusContext::Raw, 0);
@@ -184,7 +225,7 @@ impl<'a> Cpu<'a> {
         res.cpu.gpr[x_index].write(BusContext::Raw, 0, x_value & y_value);
     }
 
-    fn xor(res: &mut Resources, inst: &RawInstruction) {
+    fn xor(&self, res: &mut Resources, inst: &RawInstruction) {
         let x_index = inst.x_register();
         let y_index = inst.y_register();
         let x_value = res.cpu.gpr[x_index].read(BusContext::Raw, 0);
@@ -192,7 +233,7 @@ impl<'a> Cpu<'a> {
         res.cpu.gpr[x_index].write(BusContext::Raw, 0, x_value ^ y_value);
     }
 
-    fn add(res: &mut Resources, inst: &RawInstruction) {
+    fn add(&self, res: &mut Resources, inst: &RawInstruction) {
         let x_index = inst.x_register();
         let y_index = inst.y_register();
         let x_value = res.cpu.gpr[x_index].read(BusContext::Raw, 0);
@@ -202,7 +243,7 @@ impl<'a> Cpu<'a> {
         res.cpu.gpr[0xF].write(BusContext::Raw, 0, of as uword);
     }
 
-    fn sub(res: &mut Resources, inst: &RawInstruction) {
+    fn sub(&self, res: &mut Resources, inst: &RawInstruction) {
         let x_index = inst.x_register();
         let y_index = inst.y_register();
         let x_value = res.cpu.gpr[x_index].read(BusContext::Raw, 0);
@@ -212,14 +253,14 @@ impl<'a> Cpu<'a> {
         res.cpu.gpr[0xF].write(BusContext::Raw, 0, of as uword);
     }
 
-    fn shr1(res: &mut Resources, inst: &RawInstruction) {
+    fn shr1(&self, res: &mut Resources, inst: &RawInstruction) {
         let x_index = inst.x_register();
         let value = res.cpu.gpr[x_index].read(BusContext::Raw, 0);
         res.cpu.gpr[x_index].write(BusContext::Raw, 0, value >> 1);
         res.cpu.gpr[0xF].write(BusContext::Raw, 0, value & 1);
     }
 
-    fn rsub(res: &mut Resources, inst: &RawInstruction) {
+    fn rsub(&self, res: &mut Resources, inst: &RawInstruction) {
         let x_index = inst.x_register();
         let y_index = inst.y_register();
         let x_value = res.cpu.gpr[x_index].read(BusContext::Raw, 0);
@@ -229,14 +270,14 @@ impl<'a> Cpu<'a> {
         res.cpu.gpr[0xF].write(BusContext::Raw, 0, of as uword);
     }
 
-    fn shl1(res: &mut Resources, inst: &RawInstruction) {
+    fn shl1(&self, res: &mut Resources, inst: &RawInstruction) {
         let x_index = inst.x_register();
         let value = res.cpu.gpr[x_index].read(BusContext::Raw, 0);
         res.cpu.gpr[x_index].write(BusContext::Raw, 0, value << 1);
         res.cpu.gpr[0xF].write(BusContext::Raw, 0, value & 0x80);
     }
 
-    fn sifne(res: &mut Resources, inst: &RawInstruction) {
+    fn sifne(&self, res: &mut Resources, inst: &RawInstruction) {
         let x_index = inst.x_register();
         let y_index = inst.y_register();
         let x_value = res.cpu.gpr[x_index].read(BusContext::Raw, 0);
@@ -247,23 +288,23 @@ impl<'a> Cpu<'a> {
         }
     }
 
-    fn movi_i(res: &mut Resources, inst: &RawInstruction) {
+    fn movi_i(&self, res: &mut Resources, inst: &RawInstruction) {
         let addr = inst.address();
         res.cpu.i.write(BusContext::Raw, 0, addr);
     }
 
-    fn jumpr(res: &mut Resources, inst: &RawInstruction) {
+    fn jumpr(&self, res: &mut Resources, inst: &RawInstruction) {
         let base = res.cpu.gpr[0x0].read(BusContext::Raw, 0);
         res.cpu.pc.write(BusContext::Raw, 0, base as uptr + inst.address());
     }
 
-    fn rand(res: &mut Resources, inst: &RawInstruction) {
+    fn rand(&self, res: &mut Resources, inst: &RawInstruction) {
         let num: u8 = rand::thread_rng().gen();
         let x_index = inst.x_register();
         res.cpu.gpr[x_index].write(BusContext::Raw, 0, num & inst.immediate());
     }
 
-    fn draw(res: &mut Resources, inst: &RawInstruction) {
+    fn draw(&self, res: &mut Resources, inst: &RawInstruction) {
         let x_index = inst.x_register();
         let y_index = inst.y_register();
         let x_coord = res.cpu.gpr[x_index].read(BusContext::Raw, 0) as usize;
@@ -290,9 +331,11 @@ impl<'a> Cpu<'a> {
                 }
             }
         }
+
+        self.core().send_event(CoreEvent::Video);
     }
 
-    fn sifkeq(res: &mut Resources, inst: &RawInstruction) {
+    fn sifkeq(&self, res: &mut Resources, inst: &RawInstruction) {
         let x_index = inst.x_register();
         let key = res.cpu.gpr[x_index].read(BusContext::Raw, 0) as usize;
         let key_value = res.cpu.keys.read_bitfield(BusContext::Raw, 0, KEYS[key]);
@@ -307,7 +350,7 @@ impl<'a> Cpu<'a> {
         }
     }
 
-    fn sifkne(res: &mut Resources, inst: &RawInstruction) {
+    fn sifkne(&self, res: &mut Resources, inst: &RawInstruction) {
         let x_index = inst.x_register();
         let key = res.cpu.gpr[x_index].read(BusContext::Raw, 0) as usize;
         let key_value = res.cpu.keys.read_bitfield(BusContext::Raw, 0, KEYS[key]);
@@ -322,13 +365,13 @@ impl<'a> Cpu<'a> {
         }
     }
 
-    fn timerr(res: &mut Resources, inst: &RawInstruction) {
+    fn timerr(&self, res: &mut Resources, inst: &RawInstruction) {
         let timer_value = res.timer.counter.read(BusContext::Raw, 0);
         let x_index = inst.x_register();
         res.cpu.gpr[x_index].write(BusContext::Raw, 0, timer_value);
     }
 
-    fn keyr(res: &mut Resources, inst: &RawInstruction) {
+    fn keyr(&self, res: &mut Resources, inst: &RawInstruction) {
         // TODO: remove later...
         let key: u8 = rand::thread_rng().gen_range(0, 16);
         res.cpu.keys.write_bitfield(BusContext::Raw, 0, KEYS[key as usize], 1);
@@ -337,33 +380,33 @@ impl<'a> Cpu<'a> {
         res.cpu.gpr[x_index].write(BusContext::Raw, 0, key);
     }
 
-    fn timerw(res: &mut Resources, inst: &RawInstruction) {
+    fn timerw(&self, res: &mut Resources, inst: &RawInstruction) {
         let x_index = inst.x_register();
         let value = res.cpu.gpr[x_index].read(BusContext::Raw, 0);
         res.timer.counter.write(BusContext::Raw, 0, value);
     }
 
-    fn soundw(res: &mut Resources, inst: &RawInstruction) {
+    fn soundw(&self, res: &mut Resources, inst: &RawInstruction) {
         let x_index = inst.x_register();
         let value = res.cpu.gpr[x_index].read(BusContext::Raw, 0);
         res.spu.counter.write(BusContext::Raw, 0, value);
     }
 
-    fn add_i(res: &mut Resources, inst: &RawInstruction) {
+    fn add_i(&self, res: &mut Resources, inst: &RawInstruction) {
         let x_index = inst.x_register();
         let value = res.cpu.gpr[x_index].read(BusContext::Raw, 0);
         let i_value: udword = res.cpu.i.read(BusContext::Raw, 0);
         res.cpu.i.write(BusContext::Raw, 0, i_value + (value as udword));
     }
 
-    fn sprite_i(res: &mut Resources, inst: &RawInstruction) {
+    fn sprite_i(&self, res: &mut Resources, inst: &RawInstruction) {
         let x_index = inst.x_register();
         let value = res.cpu.gpr[x_index].read(BusContext::Raw, 0);
         let addr = (SPRITE_SIZE * value as usize) as uptr;
         res.cpu.i.write(BusContext::Raw, 0, addr as udword);
     }
 
-    fn bcd(res: &mut Resources, inst: &RawInstruction) {
+    fn bcd(&self, res: &mut Resources, inst: &RawInstruction) {
         let x_index = inst.x_register();
         let value: uword = res.cpu.gpr[x_index].read(BusContext::Raw, 0);
 
@@ -377,7 +420,7 @@ impl<'a> Cpu<'a> {
         res.memory.write(BusContext::Raw, (addr + 2) as usize, ones);
     }
 
-    fn save(res: &mut Resources, inst: &RawInstruction) {
+    fn save(&self, res: &mut Resources, inst: &RawInstruction) {
         let x_index = inst.x_register();
         for idx in 0..(x_index + 1) {
             let value = res.cpu.gpr[idx].read(BusContext::Raw, 0);
@@ -387,7 +430,7 @@ impl<'a> Cpu<'a> {
         }
     }
 
-    fn load(res: &mut Resources, inst: &RawInstruction) {
+    fn load(&self, res: &mut Resources, inst: &RawInstruction) {
         let x_index = inst.x_register();
         for idx in 0..(x_index + 1) {
             let addr: uptr = res.cpu.i.read(BusContext::Raw, 0);
@@ -397,42 +440,3 @@ impl<'a> Cpu<'a> {
         }
     }
 }
-
-/// Cpu instruction function pointer table.
-static INSTRUCTION_TABLE: [fn(&mut Resources, &RawInstruction); INSTRUCTION_COUNT] = [
-    Cpu::cls, 
-    Cpu::ret, 
-    Cpu::call_rca1802, 
-    Cpu::jump, 
-    Cpu::call, 
-    Cpu::sifeqi,
-    Cpu::sifnei,
-    Cpu::sifeq,
-    Cpu::movi, 
-    Cpu::addi, 
-    Cpu::mov, 
-    Cpu::or, 
-    Cpu::and, 
-    Cpu::xor, 
-    Cpu::add, 
-    Cpu::sub, 
-    Cpu::shr1, 
-    Cpu::rsub, 
-    Cpu::shl1, 
-    Cpu::sifne, 
-    Cpu::movi_i, 
-    Cpu::jumpr, 
-    Cpu::rand, 
-    Cpu::draw, 
-    Cpu::sifkeq, 
-    Cpu::sifkne, 
-    Cpu::timerr, 
-    Cpu::keyr, 
-    Cpu::timerw, 
-    Cpu::soundw, 
-    Cpu::add_i, 
-    Cpu::sprite_i,
-    Cpu::bcd, 
-    Cpu::save, 
-    Cpu::load,
-];

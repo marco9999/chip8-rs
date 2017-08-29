@@ -1,5 +1,7 @@
 /target/
 **/*.rs.bk
 
+**/*.dll
+
 /workspace/dumps/
 /workspace/log/
