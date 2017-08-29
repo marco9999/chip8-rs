@@ -37,94 +37,95 @@ pub struct Config {
 
 pub struct Core {
     pub config: Config,
-    resources: Box<UnsafeCell<Resources>>,
+    resources: Box<Option<UnsafeCell<Resources>>>,
     controllers: Vec<Box<Controller>>,
-    multithreaded_futures: Vec<CpuFuture<(), ()>>,
+    multithreaded_futures: Vec<CpuFuture<(), String>>,
 }
 
-unsafe impl Sync for Core {}
-
 impl Core {
-    pub fn new() -> Core {
-        Core {
-            config: Config {
-                workspace_path: "./workspace/".to_owned(),
-                time_delta_us: 20000.0,
-                multithreaded_pool: None,
-                cpu_bias: 1.0, 
-                spu_bias: 1.0,
-                timer_bias: 1.0,
+    /// Creates a new core.
+    /// You must call reset() afterwards to create the resources and controllers.
+    /// This is to prevent moves when constructing, causing the controllers
+    /// core references pointing to invalid locations.
+    pub fn new(config: Option<Config>) -> Core {
+        match config {
+            Some(config) => {
+                Core {
+                    config: config,
+                    resources: Box::new(None),
+                    controllers: Vec::new(),
+                    multithreaded_futures: Vec::new(),
+                }
             },
-            resources: Box::new(UnsafeCell::new(Resources::new())),
-            controllers: Vec::new(),
-            multithreaded_futures: Vec::new(),
+            None => { 
+                Core {
+                    config: Config {
+                        workspace_path: "./workspace/".to_owned(),
+                        time_delta_us: 20000.0,
+                        multithreaded_pool: None,
+                        cpu_bias: 1.0, 
+                        spu_bias: 1.0,
+                        timer_bias: 1.0,
+                    },
+                    resources: Box::new(None),
+                    controllers: Vec::new(),
+                    multithreaded_futures: Vec::new(),
+                }
+            },
         }
     }
 
-    pub fn new_config(config: Config) -> Core {
-        Core {
-            config: config,
-            resources: Box::new(UnsafeCell::new(Resources::new())),
-            controllers: Vec::new(),
-            multithreaded_futures: Vec::new(),
-        }
-    }
-
+    /// Resets the core, initialising a new Core state.
     pub fn reset(&mut self, rom_path: &str) -> Result<(), String> {
-        let self_ptr =  self as *const Core;
+        self.resources = Box::new(Some(UnsafeCell::new(Resources::new())));
 
+        self.controllers.clear();
         unsafe {
+            let self_ptr =  self as *const Core;
             self.controllers.push(Box::new(Cpu::new(&*self_ptr)));
             self.controllers.push(Box::new(Spu::new(&*self_ptr)));
             self.controllers.push(Box::new(Timer::new(&*self_ptr)));
         }
 
-        self.load_font_set();
-
-        if let Err(_) = self.resources().memory.read_file(0x200, rom_path) {
-            return Err("Something went wrong loading rom file.".to_owned());
-        }
+        self.load_font_set()?;
+        self.load_rom(rom_path)?;
 
         Ok(())
     }
 
+    /// Runs through each of the controllers that update the machine state.
+    /// Each run will update the state for the time step defined at initialisation.
     pub fn run(&mut self) -> Result<(), String> {
-        static mut TIME_US: f64 = 0.0;
-
         unsafe {
+            static mut TIME_US: f64 = 0.0;
             TIME_US += self.config.time_delta_us;
             info!("Emulated time elapsed (s) = {:.6}", TIME_US / 1e6);
         }
 
         for ref cont in self.controllers.iter() {
-            cont.gen_tick_event(self.config.time_delta_us);
+            cont.gen_tick_event(self.config.time_delta_us)?;
         }
 
         match self.config.multithreaded_pool {
             Some(ref pool) => {
                 for cont in self.controllers.iter() {
-                    struct _Controller(*const Controller);
-                    unsafe impl Sync for _Controller {}
-                    unsafe impl Send for _Controller {}
-                    let cont = _Controller { 0: cont.as_ref() as *const Controller };
-                    self.multithreaded_futures.push(pool.spawn_fn(move || {
-                        unsafe {
-                            let cont = &*cont.0;
-                            cont.run().unwrap();
-                            let result: Result<(), _> = Ok(());
-                            result
-                        }
-                    }));
+                    unsafe { 
+                        let temp = &*(cont.as_ref() as *const Controller); 
+                        self.multithreaded_futures.push(
+                            pool.spawn_fn(move || {
+                                temp.run()
+                            })
+                        );
+                    }
                 }
 
-                for _ in 0..self.multithreaded_futures.len() {
-                    let future = self.multithreaded_futures.pop().unwrap();
-                    future.wait().unwrap();
+                for future in self.multithreaded_futures.drain(..) {
+                    future.wait()?;
                 }
             },
             None => {
-                for ref cont in self.controllers.iter() {
-                    cont.run().unwrap();
+                for cont in self.controllers.iter() {
+                    cont.run()?;
                 }
             },
         }
@@ -132,26 +133,39 @@ impl Core {
         Ok(())
     }
 
+    /// Dumps all resources memory to workspace/dumps/file.bin.
     #[cfg(build = "debug")]
     pub fn debug_dump_all(&self, postfix_tag: &str) -> Result<(), String> {
-        if let Err(_) = self.resources().memory.dump_file(&self.workspace_path(&format!("dumps/memory{}.bin", postfix_tag))) {
+        if let Err(_) = self.resources()?.memory.dump_file(&self.workspace_path(&format!("dumps/memory{}.bin", postfix_tag))) {
             return Err("Something went wrong writing the memory dump file.".to_owned());
         }
 
         Ok(())
     }
 
+    /// Returns a relative path within the workspace.
+    /// Workspace contains config files, save files, log files, etc.
     fn workspace_path(&self, rel_path: &str) -> String {
         self.config.workspace_path.clone() + rel_path
     }
 
-    fn resources(&self) -> &mut Resources {
+    /// Returns a reference to mutable resources. 
+    fn resources(&self) -> Result<&mut Resources, String> {
         unsafe {
-            &mut *self.resources.get()
+            match *self.resources {
+                Some(ref res) => {
+                    Ok(&mut *res.get())
+                },
+                None => {
+                    Err("Core has not been initialised".to_owned())
+                },
+            }
         }
     }
 
-    fn load_font_set(&self) {
+    /// Initialises the default Chip8 font set and loads it into memory starting at offset 0x0. 
+    /// See http://devernay.free.fr/hacks/chip8/C8TECH10.HTM#font.
+    fn load_font_set(&self) -> Result<(), String> {
         let char_0: [u8; 5] = [0xF0, 0x90, 0x90, 0x90, 0xF0];
         let char_1: [u8; 5] = [0x20, 0x60, 0x20, 0x20, 0x70];
         let char_2: [u8; 5] = [0xF0, 0x10, 0xF0, 0x80, 0xF0];
@@ -169,21 +183,33 @@ impl Core {
         let char_e: [u8; 5] = [0xF0, 0x80, 0xF0, 0x80, 0xF0];
         let char_f: [u8; 5] = [0xF0, 0x80, 0xF0, 0x80, 0x80];
 
-        self.resources().memory.write_slice(BusContext::Raw, 0x0, &char_0);
-        self.resources().memory.write_slice(BusContext::Raw, 0x5, &char_1);
-        self.resources().memory.write_slice(BusContext::Raw, 0xA, &char_2);
-        self.resources().memory.write_slice(BusContext::Raw, 0xF, &char_3);
-        self.resources().memory.write_slice(BusContext::Raw, 0x14, &char_4);
-        self.resources().memory.write_slice(BusContext::Raw, 0x19, &char_5);
-        self.resources().memory.write_slice(BusContext::Raw, 0x1E, &char_6);
-        self.resources().memory.write_slice(BusContext::Raw, 0x23, &char_7);
-        self.resources().memory.write_slice(BusContext::Raw, 0x28, &char_8);
-        self.resources().memory.write_slice(BusContext::Raw, 0x2D, &char_9);
-        self.resources().memory.write_slice(BusContext::Raw, 0x32, &char_a);
-        self.resources().memory.write_slice(BusContext::Raw, 0x37, &char_b);
-        self.resources().memory.write_slice(BusContext::Raw, 0x3C, &char_c);
-        self.resources().memory.write_slice(BusContext::Raw, 0x41, &char_d);
-        self.resources().memory.write_slice(BusContext::Raw, 0x46, &char_e);
-        self.resources().memory.write_slice(BusContext::Raw, 0x4B, &char_f);
+        let res = self.resources()?;
+
+        res.memory.write_slice(BusContext::Raw, 0x0, &char_0);
+        res.memory.write_slice(BusContext::Raw, 0x5, &char_1);
+        res.memory.write_slice(BusContext::Raw, 0xA, &char_2);
+        res.memory.write_slice(BusContext::Raw, 0xF, &char_3);
+        res.memory.write_slice(BusContext::Raw, 0x14, &char_4);
+        res.memory.write_slice(BusContext::Raw, 0x19, &char_5);
+        res.memory.write_slice(BusContext::Raw, 0x1E, &char_6);
+        res.memory.write_slice(BusContext::Raw, 0x23, &char_7);
+        res.memory.write_slice(BusContext::Raw, 0x28, &char_8);
+        res.memory.write_slice(BusContext::Raw, 0x2D, &char_9);
+        res.memory.write_slice(BusContext::Raw, 0x32, &char_a);
+        res.memory.write_slice(BusContext::Raw, 0x37, &char_b);
+        res.memory.write_slice(BusContext::Raw, 0x3C, &char_c);
+        res.memory.write_slice(BusContext::Raw, 0x41, &char_d);
+        res.memory.write_slice(BusContext::Raw, 0x46, &char_e);
+        res.memory.write_slice(BusContext::Raw, 0x4B, &char_f);
+
+        Ok(())
+    }
+
+    /// Loads in a Chip8 rom at 0x200.
+    fn load_rom(&self, rom_path: &str) -> Result<(), String> {
+        if let Err(_) = self.resources()?.memory.read_file(0x200, rom_path) {
+            return Err("Something went wrong loading rom file.".to_owned());
+        }
+        Ok(())
     }
 }

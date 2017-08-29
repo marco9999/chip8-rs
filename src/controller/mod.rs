@@ -17,9 +17,9 @@ pub enum Event {
 pub trait Controller : Sync {
     /// Consumes all events in the event queue by calling step for
     /// each one.
-    fn run(&self) -> Result<(), ()> {
+    fn run(&self) -> Result<(), String> {
         for event in self.event_iter() {
-            self.step(event).unwrap();
+            self.step(event)?;
         }
 
         Ok(())
@@ -40,5 +40,5 @@ pub trait Controller : Sync {
     /// Generates and sends a clock tick event, calculated from the 
     /// time delta given (in us). The controller implementing this 
     /// is responsible for using the correct clock speed and bias.
-    fn gen_tick_event(&self, time_delta_us: f64);
+    fn gen_tick_event(&self, time_delta_us: f64) -> Result<(), String>;
 }

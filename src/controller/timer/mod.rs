@@ -38,7 +38,7 @@ impl<'a> Controller for Timer<'a> {
             Event::Tick(mut amount) => { 
                 while amount > 0 {
                     // Aquire resources.
-                    let res = self.core().resources();
+                    let res = self.core().resources()?;
 
                     // Check sound register, make source and decrement if non-zero.
                     let counter = res.timer.counter.read(BusContext::Raw, 0);
@@ -67,11 +67,12 @@ impl<'a> Controller for Timer<'a> {
         self.event_queue_tx.send(event).unwrap();
     }
 
-    fn gen_tick_event(&self, time_delta_us: f64) {
-        let clock_state = &mut self.core().resources().timer.clock_state;
+    fn gen_tick_event(&self, time_delta_us: f64) -> Result<(), String> {
+        let clock_state = &mut self.core().resources()?.timer.clock_state;
         let bias = self.core().config.timer_bias;
         clock_state.produce(time_delta_us, bias * CLOCK_SPEED);
         let ticks = clock_state.consume_whole();
         self.event_queue_tx.send(Event::Tick(ticks as isize)).unwrap();
+        Ok(())
     }
 }

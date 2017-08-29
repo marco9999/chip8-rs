@@ -21,7 +21,7 @@ fn main() {
         spu_bias: 1.0,
         timer_bias: 1.0,
     };
-    let mut core = Core::new_config(config);
+    let mut core = Core::new(Some(config));
     core.reset("./workspace/roms/PONG").unwrap();
 
     loop {
