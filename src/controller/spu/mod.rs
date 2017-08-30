@@ -45,7 +45,7 @@ impl<'a> Controller for Spu<'a> {
                     let counter = res.spu.counter.read(BusContext::Raw, 0);
                     if counter > 0 {
                         res.spu.counter.write(BusContext::Raw, 0, counter - 1);
-                        self.core().send_event(CoreEvent::Sound);
+                        self.core().send_event(CoreEvent::Audio);
                     }
                     
                     // Finished one cycle.

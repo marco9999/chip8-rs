@@ -7,10 +7,9 @@ extern crate rand;
 extern crate log;
 #[macro_use] 
 extern crate serde_derive;
-extern crate bincode;
+//extern crate bincode;
 extern crate futures;
 extern crate futures_cpupool;
-extern crate sdl2;
 
 pub mod common;
 pub mod resources;
@@ -22,11 +21,15 @@ use futures::Future;
 use futures_cpupool::CpuPool;
 use futures_cpupool::CpuFuture;
 use common::types::storage::*;
+use common::types::storage::register::Register;
+use common::types::primative::udword;
 use resources::Resources;
+use resources::cpu::KEYS;
 use controller::Controller;
 use controller::cpu::Cpu;
 use controller::spu::Spu;
 use controller::timer::Timer;
+use common::constants::cpu::{VERTICAL_RES, HORIZONTAL_RES};
 
 pub struct Config {
     pub workspace_path: String,
@@ -35,6 +38,9 @@ pub struct Config {
     pub cpu_bias: f64,
     pub spu_bias: f64,
     pub timer_bias: f64,
+
+    pub video_callback: Option<Box<Fn(&[bool; VERTICAL_RES * HORIZONTAL_RES])>>,
+    pub audio_callback: Option<Box<Fn()>>,
 }
 
 /// Events that are communicated from the controllers to the core,
@@ -43,8 +49,8 @@ enum CoreEvent {
     /// A render event, originating from a controller to update the screen.
     Video,
 
-    /// A sound event, originating from a controller to play a beep sound.
-    Sound,
+    /// An audio event, originating from a controller to play a beep sound.
+    Audio,
 }
 
 pub struct Core {
@@ -83,6 +89,8 @@ impl Core {
                         cpu_bias: 1.0, 
                         spu_bias: 1.0,
                         timer_bias: 1.0,
+                        video_callback: None,
+                        audio_callback: None,
                     },
                     resources: Box::new(None),
                     controllers: Vec::new(),
@@ -124,23 +132,25 @@ impl Core {
         if cfg!(build = "debug") {
             unsafe {
                 static mut TIME_US: f64 = 0.0;
-                TIME_US += self.config.time_delta_us;
                 info!("Emulated time elapsed (s) = {:.6}", TIME_US / 1e6);
+                TIME_US += self.config.time_delta_us;
             }
         }
 
+        // Generate the clock tick event for each controller, using the time slice set.
         for ref cont in self.controllers.iter() {
             cont.gen_tick_event(self.config.time_delta_us)?;
         }
 
+        // Run the controllers, either in multi-threaded or single-threaded mode.
         match self.config.multithreaded_pool {
             Some(ref pool) => {
                 for cont in self.controllers.iter() {
                     unsafe { 
-                        let temp = &*(cont.as_ref() as *const Controller); 
+                        let cont_static = &*(cont.as_ref() as *const Controller); 
                         self.multithreaded_futures.push(
                             pool.spawn_fn(move || {
-                                temp.run()
+                                cont_static.run()
                             })
                         );
                     }
@@ -157,13 +167,18 @@ impl Core {
             },
         }
 
+        // Handle any host interface events from controllers.
         for event in self.event_queue_rx.try_iter() {
             match event {
                 CoreEvent::Video => {
-                    self.handle_video();
+                    if let Some(ref f) = self.config.video_callback {
+                        f(&self.resources()?.cpu.framebuffer);
+                    }
                 },
-                CoreEvent::Sound => {
-                    self.handle_sound();
+                CoreEvent::Audio => {
+                    if let Some(ref f) = self.config.audio_callback {
+                        f();
+                    }
                 },
             }
         }
@@ -178,6 +193,17 @@ impl Core {
             return Err("Something went wrong writing the memory dump file.".to_owned());
         }
 
+        Ok(())
+    }
+
+    /// Sets/clears the key specified.
+    pub fn set_key(&self, key: usize, pressed: bool) -> Result<(), String> {
+        if key > 0xF {
+            return Err("Key not within valid range".to_owned());
+        }
+
+        let res = self.resources()?;
+        res.cpu.keys.write_bitfield(BusContext::Raw, 0, &KEYS[key], pressed as udword);
         Ok(())
     }
 
@@ -257,17 +283,8 @@ impl Core {
     }
 
     /// Sends an event to the back of the event queue attached to the core.
+    /// Used from controllers to do callbacks.
     fn send_event(&self, event: CoreEvent) {
         self.event_queue_tx.send(event).unwrap();
-    }
-
-    /// Updates the frame buffer.
-    fn handle_video(&self) {
-
-    }
-
-    /// Updates the sound buffer. 
-    fn handle_sound(&self) {
-
     }
 }
