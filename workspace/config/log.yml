@@ -11,12 +11,12 @@ appenders:
       pattern: "{d} - {m}{n}"
 
 root:
-  level: info
+  level: warn
   appenders:
     - stdout
 
 loggers:  
   chip8_rs:
-    level: trace
+    level: warn
     appenders:
       - trace_file

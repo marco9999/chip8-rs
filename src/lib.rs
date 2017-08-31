@@ -39,8 +39,8 @@ pub struct Config {
     pub spu_bias: f64,
     pub timer_bias: f64,
 
-    pub video_callback: Option<Box<Fn(&[bool; VERTICAL_RES * HORIZONTAL_RES])>>,
-    pub audio_callback: Option<Box<Fn()>>,
+    pub video_callback: Option<fn(&[bool; HORIZONTAL_RES * VERTICAL_RES])>,
+    pub audio_callback: Option<fn()>,
 }
 
 /// Events that are communicated from the controllers to the core,
@@ -55,7 +55,7 @@ enum CoreEvent {
 
 pub struct Core {
     config: Config,
-    resources: Box<Option<UnsafeCell<Resources>>>,
+    resources: Option<Box<UnsafeCell<Resources>>>,
     controllers: Vec<Box<Controller>>,
     multithreaded_futures: Vec<CpuFuture<(), String>>,
     event_queue_rx: Receiver<CoreEvent>,
@@ -73,7 +73,7 @@ impl Core {
             Some(config) => {
                 Core {
                     config: config,
-                    resources: Box::new(None),
+                    resources: None,
                     controllers: Vec::new(),
                     multithreaded_futures: Vec::new(),
                     event_queue_rx,
@@ -92,7 +92,7 @@ impl Core {
                         video_callback: None,
                         audio_callback: None,
                     },
-                    resources: Box::new(None),
+                    resources: None,
                     controllers: Vec::new(),
                     multithreaded_futures: Vec::new(),
                     event_queue_rx,
@@ -109,7 +109,7 @@ impl Core {
     ///  - Loads the default font set.
     ///  - Loads the rom from the path given.
     pub fn reset(&mut self, rom_path: &str) -> Result<(), String> {
-        self.resources = Box::new(Some(UnsafeCell::new(Resources::new())));
+        self.resources = Some(Box::new(UnsafeCell::new(Resources::new())));
 
         self.controllers.clear();
         unsafe {
@@ -216,7 +216,7 @@ impl Core {
     /// Returns a reference to mutable resources. 
     fn resources(&self) -> Result<&mut Resources, String> {
         unsafe {
-            match *self.resources {
+            match self.resources {
                 Some(ref res) => {
                     Ok(&mut *res.get())
                 },
