@@ -1,4 +1,4 @@
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Debug)]
 pub struct ClockState {
     ticks: f64
 }

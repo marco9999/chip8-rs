@@ -16,37 +16,23 @@ pub enum BusContext {
 /// Trait for read/writing to storage.
 pub trait Storage<T: PrimInt> {
     /// Get a mutable reference to a single unit of storage of type T.
-    fn storage(&mut self, offset: usize) -> &mut T;
+    fn storage(&self, offset: usize) -> &mut T;
 
-    /// Read mutator, applied on every read. 
-    /// By default does not modify the read.
+    /// Read a T. Override with functionality if needed.
     #[allow(unused_variables)]
-    fn mutate_read(&mut self, ctx: BusContext, value: T) -> T {
-        value
+    fn read(&self, ctx: BusContext, offset: usize) -> T {
+        *self.storage(offset)
     }
 
-    /// Write mutator, applied on every write.
-    /// By default does not modify the write.
+    /// Write a T. Override with functionality if needed.
     #[allow(unused_variables)]
-    fn mutate_write(&mut self, ctx: BusContext, value: T) -> T {
-        value
-    }
-
-    /// Read a T, applying the read modifier.
-    fn read(&mut self, ctx: BusContext, offset: usize) -> T {
-        let v = *self.storage(offset);
-        self.mutate_read(ctx, v)
-    }
-
-    /// Write a T, applying the write modifier.
-    fn write(&mut self, ctx: BusContext, offset: usize, value: T) {
-        let m = self.mutate_write(ctx, value);
-        *self.storage(offset) = m;
+    fn write(&self, ctx: BusContext, offset: usize, value: T) {
+        *self.storage(offset) = value;
     }
 
     /// Read a slice of T's.
     #[allow(unused_variables)]
-    fn read_slice(&mut self, ctx: BusContext, offset: usize, values: &mut [T]) {
+    fn read_slice(&self, ctx: BusContext, offset: usize, values: &mut [T]) {
         for index in 0..values.len() {
             values[offset] = self.read(ctx, offset + index)
         }
@@ -54,7 +40,7 @@ pub trait Storage<T: PrimInt> {
 
     /// Write a slice of T's.
     #[allow(unused_variables)]
-    fn write_slice(&mut self, ctx: BusContext, offset: usize, values: &[T]) {
+    fn write_slice(&self, ctx: BusContext, offset: usize, values: &[T]) {
         for index in 0..values.len() {
             self.write(ctx, offset + index, values[index])
         }

@@ -17,10 +17,33 @@ use sdl2::render::WindowCanvas;
 use sdl2::render::TextureCreator;
 use sdl2::video::WindowContext;
 use sdl2::render::Texture;
+use sdl2::AudioSubsystem;
+use sdl2::audio::AudioDevice;
+use sdl2::audio::AudioCallback;
+use sdl2::audio::AudioSpecDesired;
 use futures_cpupool::CpuPool;
 use chip8::Core;
 use chip8::Config;
 use chip8::common::constants::cpu::{HORIZONTAL_RES, VERTICAL_RES};
+
+struct SquareWave {
+    phase_inc: f32,
+    phase: f32,
+    volume: f32
+}
+
+impl AudioCallback for SquareWave {
+    type Channel = f32;
+
+    fn callback(&mut self, out: &mut [f32]) {
+        // Generate a square wave
+        for x in out.iter_mut() {
+            *x = if (self.phase >= 0.0) && (self.phase < 0.5) { self.volume }
+                 else { -self.volume };
+            self.phase = (self.phase + self.phase_inc) % 1.0;
+        }
+    }
+}
 
 struct SdlContext {
     sdl_context: Option<Sdl>,
@@ -28,6 +51,8 @@ struct SdlContext {
     window_canvas: Option<WindowCanvas>,
     texture_creator: Option<TextureCreator<WindowContext>>,
     texture: Option<Texture<'static>>,
+    audio_subsystem: Option<AudioSubsystem>,
+    audio_device: Option<AudioDevice<SquareWave>>
 }
 
 static mut SDL_CONTEXT: SdlContext = SdlContext {
@@ -36,6 +61,8 @@ static mut SDL_CONTEXT: SdlContext = SdlContext {
     window_canvas: None,
     texture_creator: None,
     texture: None,
+    audio_subsystem: None,
+    audio_device: None,
 };
 
 fn main() {
@@ -55,7 +82,7 @@ fn main() {
         spu_bias: 1.0,
         timer_bias: 1.0,
         video_callback: Some(render),
-        audio_callback: None,
+        audio_callback: Some(play_beep),
     };
     let mut core = Core::new(Some(config));
     core.reset("./workspace/roms/PONG").unwrap();
@@ -94,12 +121,13 @@ fn init_sdl2() {
     unsafe {
         let sdl_context = sdl2::init().unwrap();
         let video_subsystem = sdl_context.video().unwrap();
+        let audio_subsystem = sdl_context.audio().unwrap();
         let window = video_subsystem.window("chip8-rs", 800, 600)
             .position_centered()
             .opengl()
             .build()
             .unwrap();
-        let window_canvas = window.into_canvas().build().unwrap();
+        let window_canvas = window.into_canvas().present_vsync().build().unwrap();
         let texture_creator = window_canvas.texture_creator();
 
         SDL_CONTEXT = SdlContext {
@@ -108,11 +136,27 @@ fn init_sdl2() {
             window_canvas: Some(window_canvas),
             texture_creator: Some(texture_creator),
             texture: None,
+            audio_subsystem: Some(audio_subsystem),
+            audio_device: None,
         };
 
-        let texture = (&mut SDL_CONTEXT).texture_creator.as_mut().unwrap()
-            .create_texture_streaming(PixelFormatEnum::RGB24, HORIZONTAL_RES, VERTICAL_RES).unwrap();
-        SDL_CONTEXT.texture = Some(texture);
+        SDL_CONTEXT.texture = Some((&mut SDL_CONTEXT).texture_creator.as_mut().unwrap()
+            .create_texture_streaming(PixelFormatEnum::RGB24, HORIZONTAL_RES as u32, VERTICAL_RES as u32).unwrap());
+
+        let desired_spec = AudioSpecDesired {
+            freq: Some(44100),
+            channels: Some(1),  // mono
+            samples: None       // default sample size
+        };
+        SDL_CONTEXT.audio_device = Some((&mut SDL_CONTEXT).audio_subsystem.as_mut().unwrap().open_playback(None, &desired_spec, 
+            |spec| {
+                // initialize the audio callback
+                SquareWave {
+                    phase_inc: 440.0 / spec.freq as f32,
+                    phase: 0.0,
+                    volume: 0.25
+                }
+            }).unwrap());
     }
 }
 
@@ -133,6 +177,17 @@ fn render(framebuffer: &[bool; HORIZONTAL_RES * VERTICAL_RES]) {
         }).unwrap(); 
         sdl_context.window_canvas.as_mut().unwrap().copy(&sdl_context.texture.as_mut().unwrap(), None, None).unwrap();
         sdl_context.window_canvas.as_mut().unwrap().present();
+    }
+}
+
+fn play_beep(on: bool) {
+    unsafe {
+        let sdl_context = &mut SDL_CONTEXT;
+        if on {
+            sdl_context.audio_device.as_mut().unwrap().resume();
+        } else {
+            sdl_context.audio_device.as_mut().unwrap().pause();
+        }
     }
 }
 

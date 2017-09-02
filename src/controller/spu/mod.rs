@@ -3,6 +3,7 @@ use Core;
 use CoreEvent;
 use common::constants::spu::*;
 use common::types::storage::*;
+use common::types::storage::register::SyncRegister;
 use controller::*;
 
 pub struct Spu<'a> {
@@ -41,21 +42,27 @@ impl<'a> Controller for Spu<'a> {
                     // Aquire resources.
                     let res = self.core().resources()?;
 
-                    // Check sound register, make source and decrement if non-zero.
-                    let counter = res.spu.counter.read(BusContext::Raw, 0);
-                    if counter > 0 {
-                        res.spu.counter.write(BusContext::Raw, 0, counter - 1);
-                        self.core().send_event(CoreEvent::Audio);
+                    // Check sound register and decrement if non-zero.
+                    // Send sound event if required.
+                    {
+                        let counter = &res.spu.counter;
+                        let _guard = counter.scope_guard();
+
+                        let value = counter.read(BusContext::Raw, 0);
+                        if value > 0 {
+                            counter.write(BusContext::Raw, 0, value - 1);
+                        }
+
+                        if counter.is_sound_flagged() {
+                            self.core().send_event(CoreEvent::Audio(counter.read(BusContext::Raw, 0) > 0));
+                        }
                     }
                     
                     // Finished one cycle.
                     amount -= 1;
                 }
             },
-
-            _ => {
-                unimplemented!("Spu doesn't know how to handle other event types");
-            }
+            _ => { },
         }
 
         Ok(())

@@ -1,13 +1,14 @@
 use std::mem;
+use std::cell::UnsafeCell;
 use common::types::primative::*;
 use common::types::storage::*;
 use common::types::storage::register::*;
 
 /// Dword register.
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Debug)]
 pub struct DwordRegister {
     /// Holds the current value of the register.
-    value: udword,
+    value: UnsafeCell<udword>,
 }
 
 impl DwordRegister {
@@ -23,28 +24,27 @@ impl DwordRegister {
     /// assert_eq!(v, 0);
     /// ```
     pub fn new() -> DwordRegister {
-        DwordRegister { value: 0 }
+        DwordRegister { value: UnsafeCell::new(0) }
     }
 }
 
 impl Storage<uword> for DwordRegister {
-    fn storage(&mut self, offset: usize) -> &mut uword {
+    fn storage(&self, offset: usize) -> &mut uword {
         unsafe { 
-            &mut mem::transmute::<&mut udword, &mut [uword; 2]>(&mut self.value)[offset] 
+            &mut mem::transmute::<&mut udword, &mut [uword; 2]>(&mut *self.value.get())[offset] 
         }
     }
 }
 
 impl Storage<udword> for DwordRegister {
-    fn storage(&mut self, offset: usize) -> &mut udword {
+    fn storage(&self, offset: usize) -> &mut udword {
         unsafe { 
-            &mut mem::transmute::<&mut udword, &mut [udword; 1]>(&mut self.value)[offset]
+            &mut mem::transmute::<&mut udword, &mut [udword; 1]>(&mut *self.value.get())[offset]
         }
     }
 }
 
-impl Register<udword> for DwordRegister {
-}
+impl Register<udword> for DwordRegister {}
 
 impl From<udword> for DwordRegister {
     /// Create a new word register, with specified initial value.
@@ -59,6 +59,6 @@ impl From<udword> for DwordRegister {
     /// assert_eq!(v, 3);
     /// ```
     fn from(value: udword) -> DwordRegister {
-        DwordRegister { value }
+        DwordRegister { value: UnsafeCell::new(value) }
     }
 }

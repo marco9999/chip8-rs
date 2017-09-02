@@ -5,11 +5,12 @@ extern crate num;
 extern crate rand;
 #[macro_use]
 extern crate log;
-#[macro_use] 
-extern crate serde_derive;
+//#[macro_use] 
+//extern crate serde_derive; // Waiting for const generics... RFC 2000.
 //extern crate bincode;
 extern crate futures;
 extern crate futures_cpupool;
+extern crate parking_lot;
 
 pub mod common;
 pub mod resources;
@@ -21,11 +22,9 @@ use futures::Future;
 use futures_cpupool::CpuPool;
 use futures_cpupool::CpuFuture;
 use common::types::storage::*;
-use common::types::storage::register::Register;
-use common::types::primative::udword;
 use resources::Resources;
-use resources::cpu::KEYS;
 use controller::Controller;
+use controller::ControllerEvent;
 use controller::cpu::Cpu;
 use controller::spu::Spu;
 use controller::timer::Timer;
@@ -40,7 +39,7 @@ pub struct Config {
     pub timer_bias: f64,
 
     pub video_callback: Option<fn(&[bool; HORIZONTAL_RES * VERTICAL_RES])>,
-    pub audio_callback: Option<fn()>,
+    pub audio_callback: Option<fn(bool)>,
 }
 
 /// Events that are communicated from the controllers to the core,
@@ -49,8 +48,8 @@ enum CoreEvent {
     /// A render event, originating from a controller to update the screen.
     Video,
 
-    /// An audio event, originating from a controller to play a beep sound.
-    Audio,
+    /// An audio event, originating from a controller to play a beep sound (toggle).
+    Audio(bool),
 }
 
 pub struct Core {
@@ -175,9 +174,9 @@ impl Core {
                         f(&self.resources()?.cpu.framebuffer);
                     }
                 },
-                CoreEvent::Audio => {
+                CoreEvent::Audio(play) => {
                     if let Some(ref f) = self.config.audio_callback {
-                        f();
+                        f(play);
                     }
                 },
             }
@@ -187,7 +186,6 @@ impl Core {
     }
 
     /// Dumps all resources memory to workspace/dumps/file.bin.
-    #[cfg(build = "debug")]
     pub fn debug_dump_all(&self, postfix_tag: &str) -> Result<(), String> {
         if let Err(_) = self.resources()?.memory.dump_file(&self.workspace_path(&format!("dumps/memory{}.bin", postfix_tag))) {
             return Err("Something went wrong writing the memory dump file.".to_owned());
@@ -196,14 +194,17 @@ impl Core {
         Ok(())
     }
 
-    /// Sets/clears the key specified.
+    /// Generates an Controller::Event::Input event upon host telling us 
+    /// of a key change.
     pub fn set_key(&self, key: usize, pressed: bool) -> Result<(), String> {
         if key > 0xF {
             return Err("Key not within valid range".to_owned());
         }
 
-        let res = self.resources()?;
-        res.cpu.keys.write_bitfield(BusContext::Raw, 0, &KEYS[key], pressed as udword);
+        for cont in self.controllers.iter() {
+            cont.send_event(ControllerEvent::Input(key, pressed));
+        }
+
         Ok(())
     }
 
@@ -283,7 +284,7 @@ impl Core {
     }
 
     /// Sends an event to the back of the event queue attached to the core.
-    /// Used from controllers to do callbacks.
+    /// Used from controllers to do callbacks from the main thread.
     fn send_event(&self, event: CoreEvent) {
         self.event_queue_tx.send(event).unwrap();
     }

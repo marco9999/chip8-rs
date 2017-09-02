@@ -2,6 +2,7 @@ use std::sync::mpsc::*;
 use Core;
 use common::constants::timer::*;
 use common::types::storage::*;
+use common::types::storage::register::SyncRegister;
 use controller::*;
 
 pub struct Timer<'a> {
@@ -40,20 +41,22 @@ impl<'a> Controller for Timer<'a> {
                     // Aquire resources.
                     let res = self.core().resources()?;
 
-                    // Check sound register, make source and decrement if non-zero.
-                    let counter = res.timer.counter.read(BusContext::Raw, 0);
-                    if counter > 0 {
-                        res.timer.counter.write(BusContext::Raw, 0, counter - 1);
+                    // Check timer register and decrement if non-zero.
+                    {
+                        let counter = &res.timer.counter;
+                        let _guard = counter.scope_guard();
+
+                        let value = res.timer.counter.read(BusContext::Raw, 0);
+                        if value > 0 {
+                            counter.write(BusContext::Raw, 0, value - 1);
+                        }
                     }
                     
                     // Finished one cycle.
                     amount -= 1;
                 }
             },
-
-            _ => {
-                unimplemented!("Timer doesn't know how to handle other event types");
-            }
+            _ => { },
         }
 
         Ok(())

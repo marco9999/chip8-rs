@@ -34,6 +34,8 @@ pub struct Cpu {
     pub stack: Vec<uptr>,
     pub keys: DwordRegister,
     pub framebuffer: [bool; HORIZONTAL_RES * VERTICAL_RES],
+    pub halted: bool,
+    pub halted_wake_key: Option<uword>,
 }
 
 impl Cpu {
@@ -47,6 +49,8 @@ impl Cpu {
             stack: Vec::new(),
             keys: DwordRegister::new(),
             framebuffer: [false; HORIZONTAL_RES * VERTICAL_RES],
+            halted: false,
+            halted_wake_key: None,
         }
     }
 }

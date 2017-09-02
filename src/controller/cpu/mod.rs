@@ -35,6 +35,11 @@ impl<'a> Controller for Cpu<'a> {
                 while amount > 0 {
                     // Aquire resources.
                     let res = self.core().resources()?;
+                    
+                    // If we are halted, don't do anything.
+                    if res.cpu.halted {
+                        break;
+                    }
 
                     // Grab current instruction value at PC.
                     let pc: uptr = res.cpu.pc.read(BusContext::Raw, 0);
@@ -58,9 +63,16 @@ impl<'a> Controller for Cpu<'a> {
                     amount -= 1;
                 }
             },
+            ControllerEvent::Input(key, pressed) => {
+                // Aquire resources and set key.
+                let res = self.core().resources()?;
+                res.cpu.keys.write_bitfield(BusContext::Raw, 0, &KEYS[key], pressed as udword);
 
-            ControllerEvent::Input(_key, _pressed) => {
-                unimplemented!("Handling key presses not implemented yet");
+                // Wake up Cpu in case it was halted from before (see instruction 'keyr'), if button was pressed.
+                if pressed && res.cpu.halted {
+                    res.cpu.halted = false;
+                    res.cpu.halted_wake_key = Some(key as uword);
+                }
             }
         }
 
@@ -340,10 +352,6 @@ impl<'a> Cpu<'a> {
         let key = res.cpu.gpr[x_index].read(BusContext::Raw, 0) as usize;
         let key_value = res.cpu.keys.read_bitfield(BusContext::Raw, 0, KEYS[key]);
 
-        // TODO: remove later...
-        debug!("sifkeq rotating result {} -> {}...", key_value, key_value ^ 1);
-        res.cpu.keys.write_bitfield(BusContext::Raw, 0, KEYS[key], key_value ^ 1);
-
         if key_value == 1 {
             let pc: uptr = res.cpu.pc.read(BusContext::Raw, 0);
             res.cpu.pc.write(BusContext::Raw, 0, pc + INSTRUCTION_SIZE as uptr);
@@ -354,10 +362,6 @@ impl<'a> Cpu<'a> {
         let x_index = inst.x_register();
         let key = res.cpu.gpr[x_index].read(BusContext::Raw, 0) as usize;
         let key_value = res.cpu.keys.read_bitfield(BusContext::Raw, 0, KEYS[key]);
-
-        // TODO: remove later...
-        debug!("sifkeq rotating result {} -> {}...", key_value, key_value ^ 1);
-        res.cpu.keys.write_bitfield(BusContext::Raw, 0, KEYS[key], key_value ^ 1);
 
         if key_value == 0 {
             let pc: uptr = res.cpu.pc.read(BusContext::Raw, 0);
@@ -372,12 +376,18 @@ impl<'a> Cpu<'a> {
     }
 
     fn keyr(&self, res: &mut Resources, inst: &RawInstruction) {
-        // TODO: remove later...
-        let key: u8 = rand::thread_rng().gen_range(0, 16);
-        res.cpu.keys.write_bitfield(BusContext::Raw, 0, KEYS[key as usize], 1);
-
-        let x_index = inst.x_register();
-        res.cpu.gpr[x_index].write(BusContext::Raw, 0, key);
+        match res.cpu.halted_wake_key {
+            Some(key) => {
+                let x_index = inst.x_register();
+                res.cpu.gpr[x_index].write(BusContext::Raw, 0, key);
+                res.cpu.halted_wake_key = None;
+            },
+            None => {
+                let pc: uptr = res.cpu.pc.read(BusContext::Raw, 0);
+                res.cpu.pc.write(BusContext::Raw, 0, pc - INSTRUCTION_SIZE as uptr);
+                res.cpu.halted = true;
+            }
+        }
     }
 
     fn timerw(&self, res: &mut Resources, inst: &RawInstruction) {

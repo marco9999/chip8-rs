@@ -7,13 +7,14 @@
 use std::vec::Vec;
 use std::io::*;
 use std::fs::File;
+use std::cell::UnsafeCell;
 use common::types::storage::*;
 use common::types::primative::*;
 
 /// Word memory.
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Debug)]
 pub struct WordMemory {
-    values: Vec<uword>,
+    values: UnsafeCell<Vec<uword>>,
 }
 
 impl WordMemory {
@@ -30,53 +31,57 @@ impl WordMemory {
     /// ```
     pub fn new(size: usize) -> WordMemory {
         WordMemory {
-            values: vec![0; size],
+            values: UnsafeCell::new(vec![0; size]),
         }
     }
 
-    pub fn read_file(&mut self, offset: usize, path: &str) -> Result<()> {
-        let mut file = File::open(path)?;
-        file.read(&mut self.values[offset..])?;
-        Ok(())
+    pub fn read_file(&self, offset: usize, path: &str) -> Result<()> {
+        unsafe {
+            let mut file = File::open(path)?;
+            file.read(&mut (*self.values.get())[offset..])?;
+            Ok(())
+        }
     }
 
     pub fn dump_file(&self, path: &str) -> Result<()> {
-        let mut file = File::create(path)?;
-        file.write_all(&self.values)?;
-        Ok(())
+        unsafe {
+            let mut file = File::create(path)?;
+            file.write_all(&*self.values.get())?;
+            Ok(())
+        }
     }
 }
 
 impl Storage<uword> for WordMemory {
-    fn storage(&mut self, offset: usize) -> &mut uword {
-        &mut self.values[offset]
+    fn storage(&self, offset: usize) -> &mut uword {
+        unsafe { &mut (*self.values.get())[offset] }
     }
 
     #[allow(unused_variables)]
-    fn mutate_read(&mut self, ctx: BusContext, value: uword) -> uword {
-        uword::from_be(value)
+    fn read(&self, ctx: BusContext, offset: usize) -> uword {
+         uword::from_be(*self.storage(offset))
     }
 
     #[allow(unused_variables)]
-    fn mutate_write(&mut self, ctx: BusContext, value: uword) -> uword {
-        uword::to_be(value)
+    fn write(&self, ctx: BusContext, offset: usize, value: uword) {
+        *self.storage(offset) = uword::to_be(value);
     }
 }
 
 impl Storage<udword> for WordMemory {
-    fn storage(&mut self, offset: usize) -> &mut udword {
+    fn storage(&self, offset: usize) -> &mut udword {
         unsafe { 
-            &mut *(&mut self.values[offset] as *mut u8 as *mut udword)
+            &mut *(&mut (*self.values.get())[offset] as *mut u8 as *mut udword)
         }
     }
 
     #[allow(unused_variables)]
-    fn mutate_read(&mut self, ctx: BusContext, value: udword) -> udword {
-        udword::from_be(value)
+    fn read(&self, ctx: BusContext, offset: usize) -> udword {
+         udword::from_be(*self.storage(offset))
     }
 
     #[allow(unused_variables)]
-    fn mutate_write(&mut self, ctx: BusContext, value: udword) -> udword {
-        udword::to_be(value)
+    fn write(&self, ctx: BusContext, offset: usize, value: udword) {
+        *self.storage(offset) = udword::to_be(value);
     }
 }
