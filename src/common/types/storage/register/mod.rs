@@ -45,8 +45,10 @@ pub trait Register<T> : Storage<T>
         let mut value = value & (T::one().unsigned_shl(field.length) - T::one());
         value = value.unsigned_shl(field.start);
         let mut r: T = self.read(ctx, offset);
-        r = r & !((T::one().unsigned_shl(field.length) - T::one()).unsigned_shr(field.start));
-        r = r & value;
+        let mask = T::one().unsigned_shl(field.length) - T::one();
+        let mask = mask.unsigned_shl(field.start);
+        r = r & !mask;
+        r = r | value;
         self.write(ctx, offset, r);
     }
 }
