@@ -268,7 +268,7 @@ impl<'a> Cpu<'a> {
     fn shr1(_core: &Core, res: &mut Resources, inst: &RawInstruction) {
         let x_index = inst.x_register();
         let value = res.cpu.gpr[x_index].read(BusContext::Raw, 0);
-        res.cpu.gpr[x_index].write(BusContext::Raw, 0, value >> 1);
+        res.cpu.gpr[x_index].write(BusContext::Raw, 0, value.wrapping_shr(1));
         res.cpu.gpr[0xF].write(BusContext::Raw, 0, value & 1);
     }
 
@@ -285,7 +285,7 @@ impl<'a> Cpu<'a> {
     fn shl1(_core: &Core, res: &mut Resources, inst: &RawInstruction) {
         let x_index = inst.x_register();
         let value = res.cpu.gpr[x_index].read(BusContext::Raw, 0);
-        res.cpu.gpr[x_index].write(BusContext::Raw, 0, value << 1);
+        res.cpu.gpr[x_index].write(BusContext::Raw, 0, value.wrapping_shl(1));
         res.cpu.gpr[0xF].write(BusContext::Raw, 0, value & 0x80);
     }
 
