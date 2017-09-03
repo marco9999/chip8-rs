@@ -262,7 +262,7 @@ impl<'a> Cpu<'a> {
         let y_value = res.cpu.gpr[y_index].read(BusContext::Raw, 0);
         let (result, of) = x_value.overflowing_sub(y_value);
         res.cpu.gpr[x_index].write(BusContext::Raw, 0, result);
-        res.cpu.gpr[0xF].write(BusContext::Raw, 0, of as uword);
+        res.cpu.gpr[0xF].write(BusContext::Raw, 0, (!of) as uword);
     }
 
     fn shr1(&self, res: &mut Resources, inst: &RawInstruction) {
@@ -279,7 +279,7 @@ impl<'a> Cpu<'a> {
         let y_value = res.cpu.gpr[y_index].read(BusContext::Raw, 0);
         let (result, of) = y_value.overflowing_sub(x_value);
         res.cpu.gpr[x_index].write(BusContext::Raw, 0, result);
-        res.cpu.gpr[0xF].write(BusContext::Raw, 0, of as uword);
+        res.cpu.gpr[0xF].write(BusContext::Raw, 0, (!of) as uword);
     }
 
     fn shl1(&self, res: &mut Resources, inst: &RawInstruction) {
