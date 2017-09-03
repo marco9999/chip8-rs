@@ -331,8 +331,11 @@ impl<'a> Cpu<'a> {
             let row_value: uword = res.memory.read(BusContext::Raw, (addr as usize) + (line as usize));
             
             for bit in 0..8 {
+                // Calc pixel array position. If the sprite is drawn outside the screen, 
+                // it is wrapped around to the start (see Cowgod's docs).
                 let x_coord = x_coord + (bit as usize);
-                let px_index = (y_coord * HORIZONTAL_RES) + x_coord;
+                let px_index = ((y_coord * HORIZONTAL_RES) + x_coord) % (HORIZONTAL_RES * VERTICAL_RES);
+
                 let old_value: bool = res.cpu.framebuffer[px_index];
                 let new_value: bool = (row_value & (0x80 >> bit)) > 0;
 

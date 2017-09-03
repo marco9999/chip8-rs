@@ -85,7 +85,7 @@ fn main() {
         audio_callback: Some(play_beep),
     };
     let mut core = Core::new(Some(config));
-    core.reset("./workspace/roms/PONG").unwrap();
+    core.reset("./workspace/roms/BLINKY").unwrap();
 
     unsafe {
         let event_pump = &mut SDL_CONTEXT.sdl_context.as_mut().unwrap().event_pump().unwrap();
@@ -127,7 +127,10 @@ fn init_sdl2() {
             .opengl()
             .build()
             .unwrap();
-        let window_canvas = window.into_canvas().present_vsync().build().unwrap();
+        let window_canvas = window.into_canvas()
+            .present_vsync()
+            .build()
+            .unwrap();
         let texture_creator = window_canvas.texture_creator();
 
         SDL_CONTEXT = SdlContext {
